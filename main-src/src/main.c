@@ -1,8 +1,20 @@
-#include "stm32f0xx.h"
 
-extern void internal_clock();
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "usb_control.h"
+#include "oled.h"
 
 int main(void)
 {
-   internal_clock();
+   stdio_init_all();
+
+   usb_init();
+
+   oled_init();
+
+   while(1)
+   {
+      usb_task();
+      printf("Cycle");
+   }
 }
