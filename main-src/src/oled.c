@@ -4,9 +4,11 @@
 #include <stdio.h>
 #include "oled.h"
 
-const int SPI_DISP_SCK = 30;
-const int SPI_DISP_CSn = 29;
-const int SPI_DISP_TX = 31;
+const int SPI_DISP_SCK = 10;
+const int SPI_DISP_CSn = 9;
+const int SPI_DISP_TX = 11;
+
+spi_inst_t *OLED_SPI = spi1; // Use SPI1 for the LCD
 
 void init_chardisp_pins() {
     gpio_set_function(SPI_DISP_SCK, GPIO_FUNC_SPI);
@@ -14,7 +16,7 @@ void init_chardisp_pins() {
     gpio_set_function(SPI_DISP_TX, GPIO_FUNC_SPI);
 
     // initialize SPI
-    spi_init(spi1, 4000000); // 2 MHz = 220 us for both lines, 4 MHz = 130 us for both lines, 12 MHz doesnt work
+    spi_init(spi1, 2000000); // 2 MHz = 220 us for both lines, 4 MHz = 130 us for both lines, 12 MHz doesnt work
     spi_set_format(
         spi1,
         10,             // data bits

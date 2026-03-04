@@ -26,6 +26,8 @@ static const char keycode2ascii[128][2] = {
 // Application Logic
 // --------------------------------------------------------------------+
 
+
+
 // Helper function to check if a specific keycode is currently in a report
 static inline bool is_key_held(hid_keyboard_report_t const *report, uint8_t keycode) {
     for(uint8_t i = 0; i < 6; i++) {
@@ -71,7 +73,7 @@ void usb_task(void)
 
 void usb_init()
 {
-   tusb_init();
+   bool success = tusb_init();
 }
 
 // --------------------------------------------------------------------+
