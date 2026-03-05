@@ -21,6 +21,5 @@ int main(void)
    while(1)
    {
       usb_task();
-      // sleep_ms(1000);
    }
 }
