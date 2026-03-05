@@ -7,24 +7,57 @@
 #include "oled.h"
 #include "pico/stdlib.h"
 #include "letters.h"
+#include "pico/stdio_usb.h"
+
+
 
 int main(void) {
+   // servo_test_sweep(0); // if your servo is plugged into PCA9685 channel 0
+   test_force();
+}
+
+
+/*
+#include "pico/stdlib.h"
+bool pca9685_ack_test(void);
+void init_i2c(void); // or your public init function
+
+int main(void) {
+    const uint LED = PICO_DEFAULT_LED_PIN;
+    gpio_init(LED);
+    gpio_set_dir(LED, GPIO_OUT);
+
+    init_i2c();
+
+    bool ok = pca9685_ack_test();
+
+    while (true) {
+        gpio_put(LED, 1);
+        sleep_ms(ok ? 100 : 600);  // fast blink = ACK, slow blink = FAIL
+        gpio_put(LED, 0);
+        sleep_ms(ok ? 100 : 600);
+    }
+}
+*/
+/*
+int main(void) {
    stdio_init_all();
-  const uint LED = PICO_DEFAULT_LED_PIN;
-  gpio_init(LED);
-  gpio_set_dir(LED, GPIO_OUT);
+   const uint LED = PICO_DEFAULT_LED_PIN;
+   gpio_init(LED);
+   gpio_set_dir(LED, GPIO_OUT);
 
    oled_init();
 
-  while (true) {
-    gpio_put(LED, 1);
-    sleep_ms(200);
-    gpio_put(LED, 0);
-    sleep_ms(200);
-    cd_display1("ASL Robotic Hand");
-    cd_display2("Translator");
+   while (true) {
+      gpio_put(LED, 1);
+      sleep_ms(200);
+      gpio_put(LED, 0);
+      sleep_ms(200);
+      cd_display1("ASL Robotic Hand");
+      cd_display2("Translator");
   }
 }
+*/
 /*
 int main(void)
 {
