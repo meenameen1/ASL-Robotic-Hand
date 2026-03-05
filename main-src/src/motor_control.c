@@ -1,5 +1,6 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
+#include <stdbool.h>
 
 // RP35
 #define I2C_PORT i2c1
@@ -9,6 +10,15 @@
 // PCA9685
 #define PCA9685_I2C_ADDRESS 0x40
 #define PCA9685_CLOCK_FREQ_HZ 25000000
+#define PCA9685_MODE1 0x00
+#define PCA9685_MODE2 0x01
+#define PCA9685_PRESCALE 0xFE
+#define PCA9685_LED0_ON_L 0x06
+
+#define SERVO_MIN_US 500
+#define SERVO_MAX_US 2700
+#define SERVO_MID_US 1600
+
 
 static void init_i2c(void) {
     // 1) Turn on and configure the I2C peripheral hardware (I2C_PORT = i2c0)
@@ -54,8 +64,7 @@ static uint8_t pca9685_read_reg(uint8_t reg) {
     return value;
 }
 
-#define PCA9685_MODE1     0x00
-#define PCA9685_PRESCALE  0xFE
+
 
 static void pca9685_set_pwm_freq(float hz) {
     // 1) Convert desired frequency (Hz) into the PCA9685 PRESCALE value.
@@ -97,7 +106,6 @@ static void pca9685_set_pwm_freq(float hz) {
     pca9685_write_reg(PCA9685_MODE1, old_mode | 0x80);
 }
 
-#define PCA9685_LED0_ON_L 0x06
 
 static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
     // 1) Compute the base register address for this channel.
@@ -125,8 +133,8 @@ static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
 
 static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
     //     ~500..2500us pusle width 0 - 180 degrees
-    if (pulse_us < 500) pulse_us = 500;
-    if (pulse_us > 2700) pulse_us = 2700;
+    if (pulse_us < SERVO_MIN_US) pulse_us = SERVO_MIN_US;
+    if (pulse_us > SERVO_MAX_US) pulse_us = SERVO_MAX_US;
 
     // 2) At 50 Hz, one frame is 20,000 microseconds (20 ms).
     //    The PCA9685 frame is always 4096 counts long (0..4095).
@@ -143,7 +151,6 @@ static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
     pca9685_set_pwm(channel, 0, (uint16_t)counts);
 }
 
-#define PCA9685_MODE2 0x01
 
 static void pca9685_init_for_servos(void) {
     // 1) Initialize the RP2350 I2C controller and configure the SDA/SCL pins.
@@ -194,7 +201,6 @@ void servo_test_sweep(uint8_t channel) {
         sleep_ms(800);
     }
 }
-#include <stdbool.h>
 
 bool pca9685_ack_test(void) {
     // Zero-length write: if the device exists, it will ACK its address.
@@ -202,7 +208,6 @@ bool pca9685_ack_test(void) {
     return (rc >= 0);
 }
 
-#define PCA9685_LED0_ON_L  0x06
 
 
 
@@ -214,16 +219,24 @@ void test_force(void) {
     pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
     sleep_ms(10); // Wait for oscillator to stabilize
     pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important
-    while(1)
-{
-    servo_set_us(0, 500);
+    
+    
+    while(1) {
+    servo_set_us(0, SERVO_MID_US);
+    servo_set_us(1, SERVO_MID_US);
+    sleep_ms(1000);
+    
+    servo_set_us(0, SERVO_MIN_US + 200);
+    servo_set_us(1, SERVO_MIN_US + 200);
     sleep_ms(1000);
 
-    servo_set_us(0,2700);
+    servo_set_us(0, SERVO_MID_US);
+    servo_set_us(1, SERVO_MID_US);
     sleep_ms(1000);
 
-}
-    // pca9685_force_channel(0, true);         // channel 0 forced HIGH
-    // sleep_ms(2000);
+    servo_set_us(0, SERVO_MAX_US - 200);
+    servo_set_us(1, SERVO_MAX_US - 200);
+    sleep_ms(1000);
+    }
 
 }
