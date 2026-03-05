@@ -2,9 +2,9 @@
 #include "hardware/i2c.h"
 
 // RP35
-#define I2C_PORT i2c0
-#define I2C_SDA_PIN 20
-#define I2C_SCL_PIN 21
+#define I2C_PORT i2c1
+#define I2C_SDA_PIN 38
+#define I2C_SCL_PIN 39
 
 // PCA9685
 #define PCA9685_I2C_ADDRESS 0x40
@@ -101,7 +101,7 @@ static void pca9685_set_pwm_freq(float hz) {
 static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
     // 1) Compute the base register address for this channel.
     //    Channel 0 starts at LED0_ON_L (0x06).
-    //    Each channel uses 4 registers: ON_L, ON_H, OFF_L, OFF_H.
+    //    Each channel uses 4 registers: ON     _L, ON_H, OFF_L, OFF_H.
     uint8_t reg = PCA9685_LED0_ON_L + (4 * channel);
 
     // 2) Build a 5-byte buffer:
@@ -125,8 +125,8 @@ static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
 static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
     // 1) Clamp pulse width to a safe typical servo range.
     //    Many servos use ~1000..2000us. Some can do ~500..2500us, but start safe.
-    if (pulse_us < 1000) pulse_us = 1000;
-    if (pulse_us > 2000) pulse_us = 2000;
+    if (pulse_us < 500) pulse_us = 500;
+    if (pulse_us > 2500) pulse_us = 2500;
 
     // 2) At 50 Hz, one frame is 20,000 microseconds (20 ms).
     //    The PCA9685 frame is always 4096 counts long (0..4095).
@@ -225,9 +225,19 @@ static void pca9685_force_channel(uint8_t channel, bool force_high) {
 
 
 void test_force(void) {
+    init_i2c();
+    sleep_ms(2000);
+    pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
+    sleep_ms(10); // Wait for oscillator to stabilize
     pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important
-    pca9685_force_channel(0, true);         // channel 0 forced HIGH
-    sleep_ms(2000);
-    pca9685_force_channel(0, false);        // channel 0 forced LOW
-    sleep_ms(2000);
+    while(1)
+{
+    servo_set_us(0,1000);
+    sleep_ms(1000);
+    servo_set_us(0,2000);
+    sleep_ms(1000);
+}
+    // pca9685_force_channel(0, true);         // channel 0 forced HIGH
+    // sleep_ms(2000);
+
 }
