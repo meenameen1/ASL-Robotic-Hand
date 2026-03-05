@@ -8,6 +8,7 @@
 
 // PCA9685
 #define PCA9685_I2C_ADDRESS 0x40
+#define PCA9685_CLOCK_FREQ_HZ 25000000
 
 static void init_i2c(void) {
     // 1) Turn on and configure the I2C peripheral hardware (I2C_PORT = i2c0)
@@ -123,17 +124,16 @@ static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
 }
 
 static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
-    // 1) Clamp pulse width to a safe typical servo range.
-    //    Many servos use ~1000..2000us. Some can do ~500..2500us, but start safe.
+    //     ~500..2500us pusle width 0 - 180 degrees
     if (pulse_us < 500) pulse_us = 500;
-    if (pulse_us > 2500) pulse_us = 2500;
+    if (pulse_us > 2700) pulse_us = 2700;
 
     // 2) At 50 Hz, one frame is 20,000 microseconds (20 ms).
     //    The PCA9685 frame is always 4096 counts long (0..4095).
     //    So we convert microseconds to counts:
     //      counts = (pulse_us / 20000) * 4096
     //    Use integer math with rounding.
-    uint32_t counts = (pulse_us * 4096u + 10000u) / 20000u;
+    uint32_t counts = (pulse_us * 4096u) / 20000u;
 
     // 3) Ensure counts stays in range (0..4095)
     if (counts > 4095u) counts = 4095u;
@@ -194,9 +194,6 @@ void servo_test_sweep(uint8_t channel) {
         sleep_ms(800);
     }
 }
-
-#include "pico/stdlib.h"
-#include "hardware/i2c.h"
 #include <stdbool.h>
 
 bool pca9685_ack_test(void) {
@@ -207,35 +204,24 @@ bool pca9685_ack_test(void) {
 
 #define PCA9685_LED0_ON_L  0x06
 
-static void pca9685_force_channel(uint8_t channel, bool force_high) {
-    // Base register for this channel (4 regs per channel)
-    uint8_t reg = PCA9685_LED0_ON_L + 4 * channel;
-
-    // We will write: ON_L, ON_H, OFF_L, OFF_H.
-    // FULL ON is bit 4 of ON_H.
-    // FULL OFF is bit 4 of OFF_H.
-    uint8_t on_l  = 0;
-    uint8_t on_h  = force_high ? 0x10 : 0x00;  // 0x10 => FULL ON
-    uint8_t off_l = 0;
-    uint8_t off_h = force_high ? 0x00 : 0x10;  // 0x10 => FULL OFF
-
-    uint8_t buf[5] = { reg, on_l, on_h, off_l, off_h };
-    i2c_write_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, buf, 5, false);
-}
 
 
 void test_force(void) {
     init_i2c();
-    sleep_ms(2000);
+    sleep_ms(1000);
+    pca9685_set_pwm_freq(50.0f);
+    sleep_ms(10);
     pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
     sleep_ms(10); // Wait for oscillator to stabilize
     pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important
     while(1)
 {
-    servo_set_us(0,1000);
+    servo_set_us(0, 500);
     sleep_ms(1000);
-    servo_set_us(0,2000);
+
+    servo_set_us(0,2700);
     sleep_ms(1000);
+
 }
     // pca9685_force_channel(0, true);         // channel 0 forced HIGH
     // sleep_ms(2000);
