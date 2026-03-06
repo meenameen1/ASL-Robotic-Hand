@@ -27,6 +27,12 @@ typedef struct
     void (*reg_select)(int);
 } lcd_dev_t;
 
+typedef struct
+{
+    char display_buffer[140];
+    u16 len;
+} LCD_t;
+
 // The LCD device.
 // This will be initialized by LCD_direction() so that the
 // width and height will be appropriate for the rotation.
@@ -39,7 +45,7 @@ extern lcd_dev_t lcddev;
 // 1: rotate: 90
 // 2: rotate: 180
 // 3: rotate 270
-#define USE_HORIZONTAL       0
+#define USE_HORIZONTAL       1
 
 // The dimensions of the display.
 #define LCD_W 240
@@ -92,5 +98,7 @@ typedef struct {
 
 void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic);
 
-void init_spi_lcd();
+void init_spi_lcd(void);
+void LCD_write_letter(LCD_t* lcd, char letter);
+void init_stretched_font(void);
 #endif

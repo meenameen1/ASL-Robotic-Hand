@@ -52,15 +52,37 @@ void init_spi_lcd() {
     // initialize spi0 with 48 MHz clock
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SDI, GPIO_FUNC_SPI);
-    spi_init(SPI, 100 * 1000 * 1000);
+    spi_init(SPI, 48 * 1000 * 1000);
     spi_set_format(SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
 
     LCD_Setup();
     LCD_Clear(0x0000); // Clear the screen to black
 
-    LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    init_stretched_font();
+    // LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 30, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 50, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 70, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 90, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 110, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 130, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    // LCD_DrawString(10, 150, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
 }
+
+void LCD_write_letter(LCD_t* lcd, char letter)
+{
+    u16 fc = 0xFFFF; // White foreground color
+    u16 bc = 0x0000; // Black background color
+    u8 size = 32; // Character size
+    u8 mode = 0; // Non-transparent background
+
+    u16 x = (size/2)*((lcd->len-1) % 20); // X position
+    u16 y = size * ((lcd->len-1) / 20); // Y position
+
+    LCD_DrawChar(x, y, fc, bc, letter, size, mode);
+}
+
 
 
 // Set the CS pin low if val is non-zero.
@@ -831,43 +853,84 @@ const unsigned char asc2_1608[95][16]={
 {0x0C,0x32,0xC2,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},/*"~",94*/
 };
 
+// Your stretched 32x16 font (Stored in RAM)
+// 95 chars * 32 rows * 2 bytes = 6,080 bytes
+uint8_t asc2_3216[95][64];
+
+// Run this once at boot/startup
+void init_stretched_font(void) {
+    for (int char_idx = 0; char_idx < 95; char_idx++) {
+
+        // Vertical scaling: 16 rows mapped to 32 rows (Exact 2x scale)
+        for (int target_row = 0; target_row < 32; target_row++) {
+
+            // Map the target row (0-31) to the source row (0-15)
+            int src_row = target_row / 2;
+            uint8_t src_byte = asc2_1608[char_idx][src_row];
+
+            uint16_t stretched_row = 0;
+
+            // Horizontal scaling: 8 bits to 16 bits (Exact 2x scale)
+            for (int i = 0; i < 8; i++) {
+                // Extract bit i from the source byte
+                if (src_byte & (1 << i)) {
+                    // Duplicate this bit into positions (i*2) and (i*2 + 1)
+                    // The value '3' is binary '11'
+                    stretched_row |= (3 << (i * 2));
+                }
+            }
+
+            // Store sequentially as Little Endian (Bits 0-7 then Bits 8-15)
+            asc2_3216[char_idx][target_row * 2]     = stretched_row & 0xFF;
+            asc2_3216[char_idx][target_row * 2 + 1] = (stretched_row >> 8) & 0xFF;
+        }
+    }
+}
+
 //===========================================================================
 // Display a single character at position x,y on the screen.
 // fc,bc are the foreground,background colors
 // num is the ASCII character number
-// size is the height of the character (either 12 or 16)
+// size is the height of the character (either 12, 16, or 32)
 // When mode is set, the background will be transparent.
 //===========================================================================
+
 void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
 {
-    u8 temp;
+    u16 temp;
     u8 pos,t;
     num=num-' ';
     LCD_SetWindow(x,y,x+size/2-1,y+size-1);
+
     if (!mode) {
         LCD_WriteData16_Prepare();
         for(pos=0;pos<size;pos++) {
-            if (size==12)
-                temp=asc2_1206[(int)num][pos];
-            else
-                temp=asc2_1608[(int)num][pos];
+            if (size==12) temp=asc2_1206[(int)num][pos];
+            else if (size==16) temp=asc2_1608[(int)num][pos];
+            else {
+                // Combine the two 8-bit halves into a 16-bit row
+                temp = asc2_3216[(int)num][pos * 2] | (asc2_3216[(int)num][pos * 2 + 1] << 8);
+            }
+
             for (t=0;t<size/2;t++) {
                 if (temp&0x01)
                     LCD_WriteData16(fc);
                 else
                     LCD_WriteData16(bc);
                 temp>>=1;
-
             }
         }
         LCD_WriteData16_End();
-    } else {
+    } else { // Transparent background mode
         for(pos=0;pos<size;pos++)
         {
-            if (size==12)
-                temp=asc2_1206[(int)num][pos];
-            else
-                temp=asc2_1608[(int)num][pos];
+            if (size==12) temp=asc2_1206[(int)num][pos];
+            else if (size==16) temp=asc2_1608[(int)num][pos];
+            else {
+                // Combine the two 8-bit halves into a 16-bit row
+                temp = asc2_3216[(int)num][pos * 2] | (asc2_3216[(int)num][pos * 2 + 1] << 8);
+            }
+
             for (t=0;t<size/2;t++)
             {
                 if(temp&0x01)

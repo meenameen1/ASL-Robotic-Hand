@@ -1,9 +1,14 @@
 #include "tusb_config.h"
 #include "tusb.h"
+#include "usb_control.h"
+#include "hardware/timer.h"
+
+static Keyboard_Device_t* kbd;
+
 
 // --------------------------------------------------------------------+
 // ASCII Lookup Table (Letters, Numbers, Space, Enter)
-// First column is unshifted, second column is shifted
+// First column is unshifted, second colwumn is shifted
 // --------------------------------------------------------------------+
 static const char keycode2ascii[128][2] = {
     [HID_KEY_A] = {'a', 'A'}, [HID_KEY_B] = {'b', 'B'}, [HID_KEY_C] = {'c', 'C'},
@@ -19,7 +24,9 @@ static const char keycode2ascii[128][2] = {
     [HID_KEY_4] = {'4', '$'}, [HID_KEY_5] = {'5', '%'}, [HID_KEY_6] = {'6', '^'},
     [HID_KEY_7] = {'7', '&'}, [HID_KEY_8] = {'8', '*'}, [HID_KEY_9] = {'9', '('},
     [HID_KEY_0] = {'0', ')'},
-    [HID_KEY_ENTER] = {'\n', '\n'}, [HID_KEY_SPACE] = {' ', ' '},
+    [HID_KEY_ENTER] = {ENTER, ENTER}, [HID_KEY_SPACE] = {' ', ' '},
+    [HID_KEY_BACKSPACE] = {'\b', '\b'},
+    [HID_KEY_ARROW_DOWN] = {ARROW_UP, ARROW_UP}, [HID_KEY_ARROW_UP] = {ARROW_DOWN, ARROW_DOWN},
 };
 
 // --------------------------------------------------------------------+
@@ -41,6 +48,9 @@ void process_kbd_report(hid_keyboard_report_t const *report) {
     // Keep track of the last report so we only print new key presses
     static hid_keyboard_report_t prev_report = { 0 };
 
+
+    kbd->start_time_us = timer_hw->timerawl;
+
     // Check if Left Shift or Right Shift is being held down
     bool is_shift = report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
 
@@ -55,9 +65,9 @@ void process_kbd_report(hid_keyboard_report_t const *report) {
             char ch = keycode2ascii[keycode][is_shift ? 1 : 0];
 
             if (ch) {
-                // Print the character directly to the terminal!
-                printf("%c", ch);
-                fflush(stdout); // Ensure it prints immediately
+                // Give give to struct and set the ready flag
+                kbd->last_key = ch;
+                kbd->key_ready = true;
             }
         }
     }
@@ -71,9 +81,11 @@ void usb_task(void)
    tuh_task();
 }
 
-void usb_init()
+void usb_init(Keyboard_Device_t *keyboard)
 {
-   bool success = tusb_init();
+    kbd = keyboard;
+    kbd->connected = false;
+    tusb_init();
 }
 
 // --------------------------------------------------------------------+
@@ -82,12 +94,13 @@ void usb_init()
 
 // 1. Invoked when a device is plugged in
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
-    printf("\n[Keyboard Connected]\n");
+    kbd->connected = true;
     tuh_hid_receive_report(dev_addr, instance);
 }
 
 // 2. Invoked when a device is unplugged
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
+    kbd->connected = false;
     printf("\n[Keyboard Disconnected]\n");
 }
 
