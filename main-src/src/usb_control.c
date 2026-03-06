@@ -1,6 +1,7 @@
 #include "tusb_config.h"
 #include "tusb.h"
 
+#include "letters.h"
 // --------------------------------------------------------------------+
 // ASCII Lookup Table (Letters, Numbers, Space, Enter)
 // First column is unshifted, second column is shifted
@@ -56,6 +57,15 @@ void process_kbd_report(hid_keyboard_report_t const *report) {
                 // Print the character directly to the terminal!
                 printf("%c", ch);
                 fflush(stdout); // Ensure it prints immediately
+                if(ch == 'A' || ch == 'a') {
+                    move_to_letter('A');
+                }
+                else if(ch == 'B' || ch == 'b') {
+                    move_to_letter('B');
+                }
+                else if(ch == 'X' || ch == 'x') {
+                    move_to_letter('X');
+                }
             }
         }
     }

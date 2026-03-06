@@ -16,18 +16,11 @@
 
 int main(void) {
    init_servo_positions();
-   char target;
+   // move_to_letter('A');
+   
+   usb_init();
    while(1) {
-      target = 'A';
-      // move_to_letter_smoothly(target, 100, 20);
-      move_to_letter(target);
-      sleep_ms(2000);
-      target = 'B';
-      move_to_letter(target);      
-      sleep_ms(2000);
-      target = 'X';
-      move_to_letter(target);      
-      sleep_ms(2000);
+      usb_task();
    }
    
    
