@@ -6,14 +6,31 @@
 #include "usb_control.h"
 #include "oled.h"
 #include "pico/stdlib.h"
-#include "letters.h"
+
 #include "pico/stdio_usb.h"
 
+#include "letters.h"
+
+#include "pico/time.h"
 
 
 int main(void) {
-   // servo_test_sweep(0); // if your servo is plugged into PCA9685 channel 0
-   test_force();
+   init_servo_positions();
+   char target;
+   while(1) {
+      target = 'A';
+      // move_to_letter_smoothly(target, 100, 20);
+      move_to_letter(target);
+      sleep_ms(2000);
+      target = 'B';
+      move_to_letter(target);      
+      sleep_ms(2000);
+      target = 'X';
+      move_to_letter(target);      
+      sleep_ms(2000);
+   }
+   
+   
 }
 
 

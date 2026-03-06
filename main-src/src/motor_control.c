@@ -2,6 +2,8 @@
 #include "hardware/i2c.h"
 #include <stdbool.h>
 
+#include "letters.h"
+
 // RP35
 #define I2C_PORT i2c1
 #define I2C_SDA_PIN 38
@@ -19,6 +21,7 @@
 #define SERVO_MAX_US 2700
 #define SERVO_MID_US 1600
 
+static int current_us_values[MOTOR_COUNT];
 
 static void init_i2c(void) {
     // 1) Turn on and configure the I2C peripheral hardware (I2C_PORT = i2c0)
@@ -64,8 +67,6 @@ static uint8_t pca9685_read_reg(uint8_t reg) {
     return value;
 }
 
-
-
 static void pca9685_set_pwm_freq(float hz) {
     // 1) Convert desired frequency (Hz) into the PCA9685 PRESCALE value.
     //    Formula from PCA9685 datasheet:
@@ -105,7 +106,6 @@ static void pca9685_set_pwm_freq(float hz) {
     // 11) Optional but common: set RESTART bit (bit 7) so PWM restarts cleanly.
     pca9685_write_reg(PCA9685_MODE1, old_mode | 0x80);
 }
-
 
 static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
     // 1) Compute the base register address for this channel.
@@ -151,7 +151,6 @@ static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
     pca9685_set_pwm(channel, 0, (uint16_t)counts);
 }
 
-
 static void pca9685_init_for_servos(void) {
     // 1) Initialize the RP2350 I2C controller and configure the SDA/SCL pins.
     init_i2c();
@@ -181,35 +180,78 @@ static void pca9685_init_for_servos(void) {
     }
 }
 
-void servo_test_sweep(uint8_t channel) {
-    // 1) Initialize I2C + PCA9685 for servo output (50 Hz).
-    pca9685_init_for_servos();
 
-    // 2) Give things a moment before moving (optional, but helps during bring-up).
-    sleep_ms(200);
-
-    // 3) Loop forever and command the servo to three positions:
-    //    1000us (one end), 1500us (center), 2000us (other end).
-    while (true) {
-        servo_set_us(channel, 1000);
-        sleep_ms(800);
-
-        servo_set_us(channel, 1500);
-        sleep_ms(800);
-
-        servo_set_us(channel, 2000);
-        sleep_ms(800);
+void move_to_letter(char target_letter) {
+    for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
+        servo_set_us(servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index]);
     }
 }
 
-bool pca9685_ack_test(void) {
-    // Zero-length write: if the device exists, it will ACK its address.
-    int rc = i2c_write_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, NULL, 0, false);
-    return (rc >= 0);
+// DO NOT USE SMOOTH MOVEMENT -- USE REGULAR FOR NOW
+void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms) {
+    if(step_size_us <= 0) step_size_us = 100;
+    if(tick_time_ms <= 0) tick_time_ms = 20;
+
+    while(1) {
+        bool complete = true;
+
+        for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
+
+            int target = hand_poses[letter_index(target_letter)].motor_positions[servo_index];
+            int current = current_us_values[servo_index];
+            
+            if(current < target) {
+                current += step_size_us;
+                if(current > target) {
+                    current = target;
+                    complete = true;
+                }
+                else {
+                    complete = false;
+                }
+            }
+            else if(current > target) {
+                current -= step_size_us;
+                if(current < target) {
+                    current = target;
+                    complete = true;
+                }
+                else {
+                    complete = false;
+                }
+                
+            }
+
+            if (current < SERVO_MIN_US) current = SERVO_MIN_US;
+            if (current > SERVO_MID_US) current = SERVO_MID_US;
+
+            current_us_values[servo_index] = current;
+            servo_set_us(servo_index, (uint16_t)current);
+        }
+        if(complete == true){
+            break;
+        }
+        sleep_ms(tick_time_ms);
+    }
+    
 }
 
-
-
+void init_servo_positions(void) {
+    pca9685_init_for_servos();
+    init_i2c();
+    sleep_ms(1000);
+    pca9685_set_pwm_freq(50.0f);
+    sleep_ms(10);
+    pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
+    sleep_ms(10); // Wait for oscillator to stabilize
+    pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important    
+    servo_set_us(0, SERVO_MID_US);
+    servo_set_us(1, SERVO_MID_US);
+    for (int i = 0; i < MOTOR_COUNT; i++) {
+        current_us_values[i] = SERVO_MID_US;
+    }
+    sleep_ms(1000);
+}
 
 void test_force(void) {
     init_i2c();
