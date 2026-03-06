@@ -1,0 +1,103 @@
+#include "tusb_config.h"
+#include "tusb.h"
+
+// --------------------------------------------------------------------+
+// ASCII Lookup Table (Letters, Numbers, Space, Enter)
+// First column is unshifted, second column is shifted
+// --------------------------------------------------------------------+
+static const char keycode2ascii[128][2] = {
+    [HID_KEY_A] = {'a', 'A'}, [HID_KEY_B] = {'b', 'B'}, [HID_KEY_C] = {'c', 'C'},
+    [HID_KEY_D] = {'d', 'D'}, [HID_KEY_E] = {'e', 'E'}, [HID_KEY_F] = {'f', 'F'},
+    [HID_KEY_G] = {'g', 'G'}, [HID_KEY_H] = {'h', 'H'}, [HID_KEY_I] = {'i', 'I'},
+    [HID_KEY_J] = {'j', 'J'}, [HID_KEY_K] = {'k', 'K'}, [HID_KEY_L] = {'l', 'L'},
+    [HID_KEY_M] = {'m', 'M'}, [HID_KEY_N] = {'n', 'N'}, [HID_KEY_O] = {'o', 'O'},
+    [HID_KEY_P] = {'p', 'P'}, [HID_KEY_Q] = {'q', 'Q'}, [HID_KEY_R] = {'r', 'R'},
+    [HID_KEY_S] = {'s', 'S'}, [HID_KEY_T] = {'t', 'T'}, [HID_KEY_U] = {'u', 'U'},
+    [HID_KEY_V] = {'v', 'V'}, [HID_KEY_W] = {'w', 'W'}, [HID_KEY_X] = {'x', 'X'},
+    [HID_KEY_Y] = {'y', 'Y'}, [HID_KEY_Z] = {'z', 'Z'},
+    [HID_KEY_1] = {'1', '!'}, [HID_KEY_2] = {'2', '@'}, [HID_KEY_3] = {'3', '#'},
+    [HID_KEY_4] = {'4', '$'}, [HID_KEY_5] = {'5', '%'}, [HID_KEY_6] = {'6', '^'},
+    [HID_KEY_7] = {'7', '&'}, [HID_KEY_8] = {'8', '*'}, [HID_KEY_9] = {'9', '('},
+    [HID_KEY_0] = {'0', ')'},
+    [HID_KEY_ENTER] = {'\n', '\n'}, [HID_KEY_SPACE] = {' ', ' '},
+};
+
+// --------------------------------------------------------------------+
+// Application Logic
+// --------------------------------------------------------------------+
+
+// Helper function to check if a specific keycode is currently in a report
+static inline bool is_key_held(hid_keyboard_report_t const *report, uint8_t keycode) {
+    for(uint8_t i = 0; i < 6; i++) {
+        if (report->keycode[i] == keycode) return true;
+    }
+    return false;
+}
+
+// Parses the 8-byte report and prints the characters
+void process_kbd_report(hid_keyboard_report_t const *report) {
+    // Keep track of the last report so we only print new key presses
+    static hid_keyboard_report_t prev_report = { 0 };
+
+    // Check if Left Shift or Right Shift is being held down
+    bool is_shift = report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
+
+    // Loop through the 6 possible simultaneous keypress slots
+    for(uint8_t i = 0; i < 6; i++) {
+        uint8_t keycode = report->keycode[i];
+
+        // If there is a keycode, AND it wasn't pressed in the previous report
+        if (keycode && !is_key_held(&prev_report, keycode)) {
+
+            // Look up the ASCII character (using shift logic)
+            char ch = keycode2ascii[keycode][is_shift ? 1 : 0];
+
+            if (ch) {
+                // Print the character directly to the terminal!
+                printf("%c", ch);
+                fflush(stdout); // Ensure it prints immediately
+            }
+        }
+    }
+
+    // Save the current report as the previous report for the next loop
+    prev_report = *report;
+}
+
+void usb_task(void)
+{
+   tuh_task();
+}
+
+void usb_init()
+{
+   tusb_init();
+}
+
+// --------------------------------------------------------------------+
+// TinyUSB HID Callbacks
+// --------------------------------------------------------------------+
+
+// 1. Invoked when a device is plugged in
+void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
+    printf("\n[Keyboard Connected]\n");
+    tuh_hid_receive_report(dev_addr, instance);
+}
+
+// 2. Invoked when a device is unplugged
+void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
+    printf("\n[Keyboard Disconnected]\n");
+}
+
+// 3. Invoked when the keyboard sends data
+void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+
+    // Cast the raw byte array into the TinyUSB keyboard struct
+    hid_keyboard_report_t const *kbd_report = (hid_keyboard_report_t const *) report;
+
+    // Process the keystrokes
+    process_kbd_report(kbd_report);
+
+    // Ask the keyboard for the next report
+    tuh_hid_receive_report(dev_addr, instance);
+}
