@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VOSK · Live Transcription</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #050a05;
+      --panel:    #080f08;
+      --border:   #1a2e1a;
+      --glow:     #39ff14;
+      --green:    #22c55e;
+      --dim:      #1a4a1a;
+      --muted:    #2d5e2d;
+      --text:     #c8f0c8;
+      --subtext:  #507850;
+      --amber:    #f59e0b;
+      --red:      #ef4444;
+      --mono:     'Share Tech Mono', monospace;
+      --display:  'Orbitron', monospace;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); }
+
+    /* scanline overlay */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none; z-index: 9999;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      grid-template-columns: 1fr 280px;
+      height: 100vh;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    /* Header */
+    header {
+      grid-column: 1 / -1;
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wordmark {
+      font-family: var(--display);
+      font-size: 0.85rem;
+      font-weight: 900;
+      letter-spacing: 0.25em;
+      color: var(--glow);
+      text-shadow: 0 0 12px rgba(57,255,20,0.6);
+    }
+    .wordmark span { color: var(--subtext); font-weight: 400; }
+
+    .header-right { display: flex; align-items: center; gap: 24px; }
+    .sys-info { font-size: 0.65rem; letter-spacing: 0.1em; color: var(--subtext); text-transform: uppercase; }
+    .sys-info strong { color: var(--green); }
+
+    .status-indicator {
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--display);
+      font-size: 0.6rem; letter-spacing: 0.2em;
+      color: var(--subtext); text-transform: uppercase;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: all 0.3s; }
+    .status-indicator.live .dot {
+      background: var(--glow);
+      box-shadow: 0 0 10px var(--glow), 0 0 20px rgba(57,255,20,0.4);
+      animation: throb 1.2s ease-in-out infinite;
+    }
+    .status-indicator.live { color: var(--glow); }
+    @keyframes throb { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(0.6);opacity:0.4} }
+
+    /* Transcript panel */
+    .transcript-panel {
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-label {
+      padding: 12px 20px 10px;
+      font-family: var(--display);
+      font-size: 0.55rem; letter-spacing: 0.25em; text-transform: uppercase;
+      color: var(--subtext);
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-label span { color: var(--green); }
+
+    .waveform-strip {
+      height: 40px;
+      display: flex; align-items: center; gap: 2px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: #060b06; flex-shrink: 0;
+    }
+    .wave-bar { width: 3px; border-radius: 1px; background: var(--dim); height: 4px; transition: height 0.1s, background 0.3s; }
+    .wave-bar.active { background: var(--glow); box-shadow: 0 0 4px var(--glow); }
+
+    #history {
+      flex: 1; overflow-y: auto;
+      padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;
+      scrollbar-width: thin; scrollbar-color: var(--dim) transparent;
+    }
+    #history::-webkit-scrollbar { width: 4px; }
+    #history::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+
+    .utterance {
+      display: grid; grid-template-columns: 60px 1fr; gap: 10px; align-items: start;
+      padding: 10px 12px;
+      border: 1px solid var(--border); border-left: 2px solid var(--green);
+      background: #080f08; border-radius: 2px;
+      animation: appear 0.3s ease both;
+    }
+    @keyframes appear { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+    .utterance-time { font-size: 0.65rem; color: var(--subtext); padding-top: 2px; }
+    .utterance-text { font-size: 0.9rem; line-height: 1.55; color: var(--text); }
+
+    .partial-dock {
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      padding: 14px 20px; min-height: 58px;
+      background: #060b06;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .partial-tag {
+      font-family: var(--display); font-size: 0.5rem; letter-spacing: 0.2em;
+      color: var(--subtext); white-space: nowrap;
+      padding: 3px 7px; border: 1px solid var(--border);
+    }
+    #partial-text { font-size: 0.9rem; color: var(--subtext); font-style: italic; letter-spacing: 0.02em; }
+    .cursor-blink {
+      display: inline-block; width: 8px; height: 14px;
+      background: var(--glow); margin-left: 3px; vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--panel);
+      display: flex; flex-direction: column; gap: 1px;
+      border-left: 1px solid var(--border);
+    }
+    .metric-block { background: var(--panel); padding: 18px 18px 16px; border-bottom: 1px solid var(--border); }
+    .metric-title {
+      font-family: var(--display); font-size: 0.52rem; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--subtext); margin-bottom: 14px;
+    }
+
+    /* RAM gauge */
+    .ram-gauge-wrap { position: relative; margin: 0 auto 10px; width: 110px; height: 110px; }
+    .ram-svg { width: 110px; height: 110px; transform: rotate(-90deg); }
+    .ram-track { fill: none; stroke: var(--dim); stroke-width: 8; }
+    .ram-fill {
+      fill: none; stroke: var(--glow); stroke-width: 8; stroke-linecap: round;
+      stroke-dasharray: 283; stroke-dashoffset: 283;
+      transition: stroke-dashoffset 1s ease, stroke 0.5s;
+      filter: drop-shadow(0 0 4px var(--glow));
+    }
+    .ram-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    }
+    #ram-value {
+      font-family: var(--display); font-size: 1.3rem; font-weight: 700;
+      color: var(--glow); text-shadow: 0 0 10px rgba(57,255,20,0.5); line-height: 1;
+    }
+    .ram-unit { font-size: 0.6rem; color: var(--subtext); letter-spacing: 0.1em; }
+    .ram-bar-wrap { height: 6px; background: var(--dim); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+    .ram-bar-fill {
+      height: 100%; background: linear-gradient(90deg, var(--green), var(--glow));
+      border-radius: 3px; width: 0%; transition: width 1s ease; box-shadow: 0 0 6px var(--glow);
+    }
+    .ram-bar-label { display: flex; justify-content: space-between; font-size: 0.6rem; color: var(--subtext); margin-top: 5px; }
+
+    /* Latency */
+    .stat-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { font-size: 0.65rem; color: var(--subtext); letter-spacing: 0.05em; }
+    .stat-val { font-family: var(--display); font-size: 0.9rem; font-weight: 700; color: var(--green); transition: color 0.3s; }
+    .stat-val.warn   { color: var(--amber); }
+    .stat-val.danger { color: var(--red); }
+    .stat-unit { font-size: 0.6rem; color: var(--subtext); }
+
+    /* Word count */
+    .count-display { text-align: center; padding: 6px 0 4px; }
+    #word-count {
+      font-family: var(--display); font-size: 2.2rem; font-weight: 900;
+      color: var(--glow); text-shadow: 0 0 14px rgba(57,255,20,0.4); display: block; line-height: 1;
+    }
+    .count-sub { font-size: 0.6rem; color: var(--subtext); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; }
+
+    .sidebar-spacer { flex: 1; }
+    .sidebar-footer { padding: 12px 18px; border-top: 1px solid var(--border); font-size: 0.6rem; color: var(--subtext); letter-spacing: 0.08em; }
+    #session-time { color: var(--green); }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="wordmark">VOSK <span>/ STT MONITOR</span></div>
+    <div class="header-right">
+      <div class="sys-info">Model: <strong>small-en-us-0.15</strong></div>
+      <div class="sys-info">Rate: <strong>16 kHz</strong></div>
+      <div class="status-indicator" id="status-ind">
+        <div class="dot"></div>
+        <span id="status-label">CONNECTING</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Transcript -->
+  <div class="transcript-panel">
+    <div class="panel-label">
+      Transcription log
+      <span id="result-count">0 results</span>
+    </div>
+    <div class="waveform-strip" id="waveform-strip"></div>
+    <div id="history">
+      <div style="color:var(--subtext);font-size:0.75rem;text-align:center;padding:40px 0;letter-spacing:0.1em;" data-placeholder>
+        — awaiting speech —
+      </div>
+    </div>
+    <div class="partial-dock">
+      <div class="partial-tag">PARTIAL</div>
+      <div>
+        <span id="partial-text">…</span>
+        <span class="cursor-blink"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="metric-block">
+      <div class="metric-title">Memory · RSS</div>
+      <div class="ram-gauge-wrap">
+        <svg class="ram-svg" viewBox="0 0 100 100">
+          <circle class="ram-track" cx="50" cy="50" r="45"/>
+          <circle class="ram-fill" id="ram-arc" cx="50" cy="50" r="45"/>
+        </svg>
+        <div class="ram-center">
+          <span id="ram-value">–</span>
+          <span class="ram-unit">MB</span>
+        </div>
+      </div>
+      <div class="ram-bar-wrap"><div class="ram-bar-fill" id="ram-bar"></div></div>
+      <div class="ram-bar-label"><span>0</span><span id="ram-bar-pct">–</span><span>2 GB</span></div>
+    </div>
+
+    <div class="metric-block">
+      <div class="metric-title">Latency</div>
+      <div class="stat-row">
+        <span class="stat-label">Avg result</span>
+        <span><span class="stat-val" id="lat-avg-r">–</span> <span class="stat-unit">ms</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Max result</span>
+        <span><span class="stat-val" id="lat-max-r">–</span> <span class="stat-unit">ms</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Avg partial</span>
+        <span><span class="stat-val" id="lat-avg-p">–</span> <span class="stat-unit">ms</span></span>
+      </div>
+    </div>
+
+    <div class="metric-block">
+      <div class="metric-title">Session words</div>
+      <div class="count-display">
+        <span id="word-count">0</span>
+        <div class="count-sub">words transcribed</div>
+      </div>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">Session: <span id="session-time">00:00</span></div>
+  </div>
+
+</div>
+<script>
+  // Waveform
+  const strip = document.getElementById('waveform-strip');
+  const bars = [];
+  for (let i = 0; i < 60; i++) {
+    const b = document.createElement('div');
+    b.className = 'wave-bar';
+    strip.appendChild(b);
+    bars.push(b);
+  }
+  let waveActive = false;
+  function animateWave() {
+    if (!waveActive) return;
+    const peak = Math.floor(Math.random() * bars.length);
+    bars.forEach((b, i) => {
+      const d = Math.abs(i - peak);
+      b.classList.toggle('active', d < 4);
+      b.style.height = d < 4 ? (4 + (4 - d) * 6 * Math.random()) + 'px' : '4px';
+    });
+    setTimeout(animateWave, 80);
+  }
+
+  // Session timer
+  const sessionStart = Date.now();
+  setInterval(() => {
+    const s = Math.floor((Date.now() - sessionStart) / 1000);
+    document.getElementById('session-time').textContent =
+      String(Math.floor(s / 60)).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+  }, 1000);
+
+  let resultCount = 0, wordCount = 0;
+  const historyEl = document.getElementById('history');
+  const statusInd = document.getElementById('status-ind');
+
+  function setStatus(live) {
+    statusInd.classList.toggle('live', live);
+    document.getElementById('status-label').textContent = live ? 'LIVE' : 'OFFLINE';
+    if (live && !waveActive) { waveActive = true; animateWave(); }
+    if (!live) waveActive = false;
+  }
+
+  function updateRAM(mb) {
+    document.getElementById('ram-value').textContent = mb.toFixed(1);
+    const pct = Math.min(mb / 2048, 1);
+    document.getElementById('ram-arc').style.strokeDashoffset = 283 - 283 * pct;
+    document.getElementById('ram-arc').style.stroke = pct > 0.8 ? '#ef4444' : pct > 0.6 ? '#f59e0b' : '#39ff14';
+    document.getElementById('ram-bar').style.width = (pct * 100) + '%';
+    document.getElementById('ram-bar-pct').textContent = (pct * 100).toFixed(1) + '%';
+  }
+
+  function colorLat(id, ms) {
+    const el = document.getElementById(id);
+    el.textContent = ms.toFixed(2);
+    el.classList.remove('warn','danger');
+    if (ms > 500) el.classList.add('danger');
+    else if (ms > 200) el.classList.add('warn');
+  }
+
+  function addResult(text, ts) {
+    historyEl.querySelector('[data-placeholder]')?.remove();
+    resultCount++;
+    wordCount += text.trim().split(/\s+/).filter(Boolean).length;
+    document.getElementById('result-count').textContent = `${resultCount} result${resultCount !== 1 ? 's' : ''}`;
+    document.getElementById('word-count').textContent = wordCount;
+    const el = document.createElement('div');
+    el.className = 'utterance';
+    el.innerHTML = `<div class="utterance-time">${ts}</div><div class="utterance-text">${text}</div>`;
+    historyEl.appendChild(el);
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  // SSE
+  const es = new EventSource('/stream');
+  es.onopen = () => setStatus(true);
+  es.onerror = () => setStatus(false);
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'heartbeat') return;
+    if (d.type === 'status')  { setStatus(d.text === 'Listening'); return; }
+    if (d.type === 'ram')     { updateRAM(d.mb); return; }
+    if (d.type === 'partial') { document.getElementById('partial-text').textContent = d.text || '…'; setStatus(true); return; }
+    if (d.type === 'result')  {
+      document.getElementById('partial-text').textContent = '…';
+      addResult(d.text, d.ts);
+      if (d.avg_result_ms  != null) colorLat('lat-avg-r', d.avg_result_ms);
+      if (d.max_result_ms  != null) colorLat('lat-max-r', d.max_result_ms);
+      if (d.avg_partial_ms != null) colorLat('lat-avg-p', d.avg_partial_ms);
+    }
+  };
+</script>
+</body>
+</html>
