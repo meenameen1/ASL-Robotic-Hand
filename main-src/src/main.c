@@ -15,15 +15,39 @@
 
 
 int main(void) {
+   
+   int x;
    init_servo_positions();
-   // move_to_letter('A');
+   char target_letter;
+
+
+   absolute_time_t start_time_A = get_absolute_time();
+   target_letter = 'A';
+   move_to_letter(target_letter);
+   int64_t elapsed_time_start_to_A = absolute_time_diff_us(start_time_A, get_absolute_time());
+
+   absolute_time_t start_time_B = get_absolute_time();
+   target_letter = 'B';
+   move_to_letter(target_letter);
+   int64_t elapsed_time_start_to_B = absolute_time_diff_us(start_time_B, get_absolute_time());
+
+   absolute_time_t start_time_X = get_absolute_time();
+   target_letter = 'X';
+   move_to_letter(target_letter);
+   int64_t elapsed_time_start_to_X = absolute_time_diff_us(start_time_X, get_absolute_time());
+
+   
+
+
+
+   x=1;
+
+
    
    usb_init();
    while(1) {
       usb_task();
    }
-   
-   
 }
 
 

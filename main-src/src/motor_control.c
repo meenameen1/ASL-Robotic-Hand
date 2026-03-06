@@ -24,7 +24,7 @@
 static int current_us_values[MOTOR_COUNT];
 
 static void init_i2c(void) {
-    // 1) Turn on and configure the I2C peripheral hardware (I2C_PORT = i2c0)
+
     i2c_init(I2C_PORT, 100 * 1000);
 
     // 2) Tell the GPIO mux: "this pin is controlled by the I2C peripheral now"
