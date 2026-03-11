@@ -6,8 +6,11 @@
 #include "oled.h"
 #include "lcd.h"
 #include "ui.h"
+#include "pico/multicore.h"
 
 #include <math.h>
+
+void core1_operation(void);
 
 
 int main(void)
@@ -15,6 +18,20 @@ int main(void)
    stdio_init_all();
    sleep_ms(500);
 
+
+   multicore_launch_core1(core1_operation);
+
+   while(1)
+   {
+
+   }
+
+
+}
+
+// This function will run on the second core and handle all USB, LCD, OLED, and UI logic
+void core1_operation(void)
+{
    Keyboard_Device_t keyboard =
    {
        .last_key = 0,
@@ -38,7 +55,6 @@ int main(void)
       .keyboard = &keyboard,
       .lcd = &lcd,
    };
-
 
    while(1)
    {
