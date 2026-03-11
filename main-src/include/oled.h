@@ -6,8 +6,22 @@
 void send_spi_cmd(spi_inst_t* spi, uint16_t value);
 void send_spi_data(spi_inst_t* spi, uint16_t value);
 void cd_init();
-void cd_display1(const char *string);
-void cd_display2(const char *string);
+void clear_display();
+void cd_display1(const char *string, bool show_arrow);
+void cd_display2(const char *string, bool show_arrow);
 void oled_init();
+
+typedef uint32_t OLED_mode_t;
+
+typedef enum
+{
+    OLED_MODE_DEFAULT,
+    OLED_MODE_KEYBOARD_DISCONNECTED,
+    OLED_MODE_TYPING,
+    OLED_MODE_TRANSLATING,
+    OLED_MODE_ERROR,
+} OLED_Mode_t;
+
+void display_screen(OLED_mode_t oled_mode);
 
 #endif

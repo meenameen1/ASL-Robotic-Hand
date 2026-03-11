@@ -4,9 +4,14 @@
 #include <stdio.h>
 #include "oled.h"
 
-const int SPI_DISP_SCK = 30;
-const int SPI_DISP_CSn = 29;
-const int SPI_DISP_TX = 31;
+const int SPI_DISP_SCK = 10;
+const int SPI_DISP_CSn = 9;
+const int SPI_DISP_TX = 11;
+
+#define UP_ARROW_CODE 0b11011001
+#define DOWN_ARROW_CODE 0b11011010
+
+spi_inst_t *OLED_SPI = spi1; // Use SPI1 for the LCD
 
 void init_chardisp_pins() {
     gpio_set_function(SPI_DISP_SCK, GPIO_FUNC_SPI);
@@ -14,7 +19,7 @@ void init_chardisp_pins() {
     gpio_set_function(SPI_DISP_TX, GPIO_FUNC_SPI);
 
     // initialize SPI
-    spi_init(spi1, 4000000); // 2 MHz = 220 us for both lines, 4 MHz = 130 us for both lines, 12 MHz doesnt work
+    spi_init(spi1, 2000000); // 2 MHz = 220 us for both lines, 4 MHz = 130 us for both lines, 12 MHz doesnt work
     spi_set_format(
         spi1,
         10,             // data bits
@@ -37,7 +42,7 @@ void cd_init() {
 
     sleep_ms(1);
     // Perform a Function Set command
-    send_spi_cmd(spi, 0x38);
+    send_spi_cmd(spi, 0x3A); // English russian table for arrows
     // Perform a Display On/Off command
     send_spi_cmd(spi, 0x0c);
     // Perform a Clear Display command
@@ -49,30 +54,89 @@ void cd_init() {
     send_spi_cmd(spi, 0x02);
 }
 
-void cd_display1(const char *str) {
+void clear_display() {
+    spi_inst_t* spi = spi1;
+    send_spi_cmd(spi, 0x01); // Clear Display command
+    sleep_ms(2);
+}
+
+void cd_display1(const char *str, bool show_arrow) {
     spi_inst_t* spi = spi1;
     send_spi_cmd(spi, 0x02);
+    int i = 0;
     while(*str != '\0') {
         send_spi_data(spi, *str);
         str++;
+        i++;
+    }
+    if(show_arrow)
+    {
+        while(i < 15) {
+            send_spi_data(spi, ' '); // Pad with spaces to clear old characters
+            i++;
+        }
+        send_spi_data(spi, UP_ARROW_CODE);
     }
 }
-void cd_display2(const char *str) {
+void cd_display2(const char *str, bool show_arrow) {
     spi_inst_t* spi = spi1;
     send_spi_cmd(spi, 0xc0);
+    int i = 0;
     while(*str != '\0') {
         send_spi_data(spi, *str);
         str++;
+        i++;
+    }
+    if(show_arrow)
+    {
+        while(i < 15) {
+            send_spi_data(spi, ' '); // Pad with spaces to clear old characters
+            i++;
+        }
+        send_spi_data(spi, DOWN_ARROW_CODE);
     }
 }
+
+void display_screen(OLED_mode_t oled_mode)
+{
+    switch(oled_mode)
+    {
+        case OLED_MODE_DEFAULT:
+            clear_display();
+            cd_display1("ASL Robotic Hand", 0);
+            cd_display2("Translator", 1);
+            break;
+        case OLED_MODE_KEYBOARD_DISCONNECTED:
+            clear_display();
+            cd_display1("Keyboard", 0);
+            cd_display2("Disconnected", 0);
+            break;
+        case OLED_MODE_TYPING:
+            clear_display();
+            cd_display1("Typing...", 0);
+            cd_display2("", 0);
+            break;
+        case OLED_MODE_TRANSLATING:
+            clear_display();
+            cd_display1("Translating...", 0);
+            cd_display2("", 0);
+            break;
+        case OLED_MODE_ERROR:
+            clear_display();
+            cd_display1("Error!", 0);
+            cd_display2("", 0);
+            break;
+}
+}
+
 
 void oled_init()
 {
     init_chardisp_pins();
     cd_init();
     // uint32_t initialTime = timer_hw->timerawl;
-    cd_display1("ASL Robotic Hand");
-    cd_display2("Translator");
+    // cd_display1("ASL Robotic Hand",0);
+    // cd_display2("Translator",1);
 
     // uint32_t finalTime = timer_hw->timerawl;
     // uint32_t timeDiff = finalTime - initialTime; // 131us
