@@ -19,25 +19,8 @@ int main(void) {
    // init_servo_positions();
    // char target_letter;
 
-/*
-   absolute_time_t start_time_A = get_absolute_time();
-   target_letter = 'A';
-   move_to_letter(target_letter);
-   int64_t elapsed_time_start_to_A = absolute_time_diff_us(start_time_A, get_absolute_time());
-
-   absolute_time_t start_time_B = get_absolute_time();
-   target_letter = 'B';
-   move_to_letter(target_letter);
-   int64_t elapsed_time_start_to_B = absolute_time_diff_us(start_time_B, get_absolute_time());
-
-   absolute_time_t start_time_X = get_absolute_time();
-   target_letter = 'X';
-   move_to_letter(target_letter);
-   int64_t elapsed_time_start_to_X = absolute_time_diff_us(start_time_X, get_absolute_time());
-*/
    init_servo_positions();
    char target_letter;
-
    // while(1) {
    //    secondpwmtest(15, 500);
    //    sleep_ms(2000);
@@ -52,12 +35,14 @@ int main(void) {
    while(1) {
       target_letter = 'H';
       move_to_letter(target_letter);
+      // move_to_letter_smoothly(target_letter, 100, 20);
       sleep_ms(2000);
       target_letter = 'I';
       move_to_letter(target_letter);
+      // move_to_letter_smoothly(target_letter, 10, 10);
       sleep_ms(2000);
-      
    }
+   // }
    // while(1) {
    //    target_letter = 'A';
    //    move_to_letter(target_letter);
@@ -117,24 +102,5 @@ int main(void) {
       cd_display1("ASL Robotic Hand");
       cd_display2("Translator");
   }
-}
-*/
-/*
-int main(void)
-{
-   stdio_init_all();
-   sleep_ms(2000); 
-   printf("Hello ASL Robotic Hand!\n");
-   MovementInstructions instructions = calculate_delta('A', 'B');
-
-   printf("Instructions for moving from A to B:\n");
-   for (int i = 0; i < MOTOR_COUNT; i++) {
-      printf("Motor %d: %d\n", i, instructions.deltas[i]);
-   }
-
-   while (true) {
-      tight_loop_contents();
-   }
-   
 }
 */

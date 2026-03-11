@@ -5,9 +5,12 @@
 #include "letters.h"
 
 // RP35
+// #define I2C_PORT i2c1
+// #define I2C_SDA_PIN 38
+// #define I2C_SCL_PIN 39
 #define I2C_PORT i2c1
-#define I2C_SDA_PIN 38
-#define I2C_SCL_PIN 39
+#define I2C_SDA_PIN 14
+#define I2C_SCL_PIN 15
 
 // PCA9685
 #define PCA9685_I2C_ADDRESS_1 0x40
@@ -197,11 +200,9 @@ void move_to_letter(char target_letter) {
     }
 }
 
-// DO NOT USE SMOOTH MOVEMENT -- USE REGULAR FOR NOW
-/*
 void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms) {
-    if(step_size_us <= 0) step_size_us = 100;
-    if(tick_time_ms <= 0) tick_time_ms = 20;
+    if(step_size_us <= 0) step_size_us = 5;
+    if(tick_time_ms <= 0) tick_time_ms = 5;
 
     while(1) {
         bool complete = true;
@@ -240,13 +241,13 @@ void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time
             servo_set_us(servo_index, (uint16_t)current);
         }
         if(complete == true){
-            break;
+            return;
         }
         sleep_ms(tick_time_ms);
     }
     
 }
-*/
+
 void init_servo_positions(void) {
     pca9685_init_for_servos();
     init_i2c();
