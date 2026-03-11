@@ -10,7 +10,8 @@
 #define I2C_SCL_PIN 39
 
 // PCA9685
-#define PCA9685_I2C_ADDRESS 0x40
+#define PCA9685_I2C_ADDRESS_1 0x40
+#define PCA9685_I2C_ADDRESS_2 0x41
 #define PCA9685_CLOCK_FREQ_HZ 25000000
 #define PCA9685_MODE1 0x00
 #define PCA9685_MODE2 0x01
@@ -37,7 +38,7 @@ static void init_i2c(void) {
     gpio_pull_up(I2C_SCL_PIN);
 }
 
-static void pca9685_write_reg(uint8_t reg, uint8_t value) {
+static void pca9685_write_reg(uint8_t reg, uint8_t value, uint8_t address) {
     // 1) Make a 2-byte buffer: [register_address, register_value]
     uint8_t buf[2];
     buf[0] = reg;
@@ -49,25 +50,25 @@ static void pca9685_write_reg(uint8_t reg, uint8_t value) {
     //    - buf: pointer to bytes to send
     //    - 2: number of bytes to send
     //    - false: send a STOP condition at the end (end of transaction)
-    i2c_write_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, buf, 2, false);
+    i2c_write_blocking(I2C_PORT, address, buf, 2, false);
 }
 
-static uint8_t pca9685_read_reg(uint8_t reg) {
+static uint8_t pca9685_read_reg(uint8_t reg, uint8_t address) {
 
     // 1) Tell the PCA9685 which register we want to read
-    i2c_write_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, &reg, 1, true);
+    i2c_write_blocking(I2C_PORT, address, &reg, 1, true);
 
     // 2) Variable to store the value we read
     uint8_t value;
 
     // 3) Read one byte from the PCA9685
-    i2c_read_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, &value, 1, false);
+    i2c_read_blocking(I2C_PORT, address, &value, 1, false);
 
     // 4) Return the byte we read
     return value;
 }
 
-static void pca9685_set_pwm_freq(float hz) {
+static void pca9685_set_pwm_freq(float hz, uint8_t address) {
     // 1) Convert desired frequency (Hz) into the PCA9685 PRESCALE value.
     //    Formula from PCA9685 datasheet:
     //    prescale = round(osc_clock / (4096 * hz)) - 1
@@ -79,35 +80,35 @@ static void pca9685_set_pwm_freq(float hz) {
     uint8_t prescale = (uint8_t)(prescale_f + 0.5f);
 
     // 3) Read the current MODE1 register so we don't accidentally overwrite other bits.
-    uint8_t old_mode = pca9685_read_reg(PCA9685_MODE1);
+    uint8_t old_mode = pca9685_read_reg(PCA9685_MODE1, address);
 
     // 4) Put the chip into SLEEP mode so PRESCALE can be changed safely.
     //    SLEEP bit is bit 4 (0x10).
     uint8_t sleep_mode = (old_mode & 0x7F) | 0x10;
 
     // 5) Write MODE1 with SLEEP=1 (go to sleep).
-    pca9685_write_reg(PCA9685_MODE1, sleep_mode);
+    pca9685_write_reg(PCA9685_MODE1, sleep_mode, address);
 
     // 6) Small delay to let the oscillator stop cleanly.
     sleep_ms(1);
 
     // 7) Write the computed PRESCALE value.
-    pca9685_write_reg(PCA9685_PRESCALE, prescale);
+    pca9685_write_reg(PCA9685_PRESCALE, prescale, address);
 
     // 8) Delay for the prescale write to take effect.
     sleep_ms(1);
 
     // 9) Restore MODE1 (wake up: SLEEP=0).
-    pca9685_write_reg(PCA9685_MODE1, old_mode);
+    pca9685_write_reg(PCA9685_MODE1, old_mode, address);
 
     // 10) Give it time to restart.
     sleep_ms(1);
 
     // 11) Optional but common: set RESTART bit (bit 7) so PWM restarts cleanly.
-    pca9685_write_reg(PCA9685_MODE1, old_mode | 0x80);
+    pca9685_write_reg(PCA9685_MODE1, old_mode | 0x80, address);
 }
 
-static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
+static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off, uint8_t address) {
     // 1) Compute the base register address for this channel.
     //    Channel 0 starts at LED0_ON_L (0x06).
     //    Each channel uses 4 registers: ON     _L, ON_H, OFF_L, OFF_H.
@@ -128,10 +129,15 @@ static void pca9685_set_pwm(uint8_t channel, uint16_t on, uint16_t off) {
 
     // 5) Write all 4 PWM registers in one I2C transaction.
     //    This relies on the PCA9685 auto-increment feature (common default / recommended).
-    i2c_write_blocking(I2C_PORT, PCA9685_I2C_ADDRESS, buf, 5, false);
+    i2c_write_blocking(I2C_PORT, address, buf, 5, false);
 }
 
 static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
+    uint8_t address = PCA9685_I2C_ADDRESS_1;
+    if (channel > 15) {
+        channel -= 16;
+        address = PCA9685_I2C_ADDRESS_2;
+    }
     //     ~500..2500us pusle width 0 - 180 degrees
     if (pulse_us < SERVO_MIN_US) pulse_us = SERVO_MIN_US;
     if (pulse_us > SERVO_MAX_US) pulse_us = SERVO_MAX_US;
@@ -148,7 +154,7 @@ static void servo_set_us(uint8_t channel, uint16_t pulse_us) {
 
     // 4) Create the pulse by turning ON at 0 and OFF at 'counts'.
     //    That means: output is HIGH for 'counts' ticks each frame.
-    pca9685_set_pwm(channel, 0, (uint16_t)counts);
+    pca9685_set_pwm(channel, 0, (uint16_t)counts, address);
 }
 
 static void pca9685_init_for_servos(void) {
@@ -161,22 +167,26 @@ static void pca9685_init_for_servos(void) {
     // 3) Set MODE2:
     //    0x04 sets "OUTDRV" = 1 (totem-pole output). Most PCA9685 servo boards expect this.
     //    This affects how the output pins drive HIGH/LOW.
-    pca9685_write_reg(PCA9685_MODE2, 0x04);
+    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1);
+    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_2);
 
     // 4) Set MODE1 to a known state (normal mode, not sleeping).
     //    0x00 clears SLEEP and other special modes.
-    pca9685_write_reg(PCA9685_MODE1, 0x00);
+    pca9685_write_reg(PCA9685_MODE1, 0x00, PCA9685_I2C_ADDRESS_1);
+    pca9685_write_reg(PCA9685_MODE1, 0x00, PCA9685_I2C_ADDRESS_2);
 
     // 5) Give the oscillator time to start.
     sleep_ms(10);
 
     // 6) Set PWM frequency to 50 Hz (standard for hobby servos).
-    pca9685_set_pwm_freq(50.0f);
+    pca9685_set_pwm_freq(50.0f, PCA9685_I2C_ADDRESS_1);
+    pca9685_set_pwm_freq(50.0f, PCA9685_I2C_ADDRESS_2);
 
     // 7) Optional: set all channels off initially (prevents surprises).
     //    You can comment this out if you want.
     for (uint8_t ch = 0; ch < 16; ch++) {
-        pca9685_set_pwm(ch, 0, 0);
+        pca9685_set_pwm(ch, 0, 0, PCA9685_I2C_ADDRESS_1);
+        pca9685_set_pwm(ch, 0, 0, PCA9685_I2C_ADDRESS_2);
     }
 }
 
@@ -188,6 +198,7 @@ void move_to_letter(char target_letter) {
 }
 
 // DO NOT USE SMOOTH MOVEMENT -- USE REGULAR FOR NOW
+/*
 void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms) {
     if(step_size_us <= 0) step_size_us = 100;
     if(tick_time_ms <= 0) tick_time_ms = 20;
@@ -235,16 +246,19 @@ void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time
     }
     
 }
-
+*/
 void init_servo_positions(void) {
     pca9685_init_for_servos();
     init_i2c();
     sleep_ms(1000);
-    pca9685_set_pwm_freq(50.0f);
+    pca9685_set_pwm_freq(50.0f, PCA9685_I2C_ADDRESS_1);
+    pca9685_set_pwm_freq(50.0f, PCA9685_I2C_ADDRESS_2);
     sleep_ms(10);
-    pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
+    pca9685_write_reg(PCA9685_MODE1, 0x20, PCA9685_I2C_ADDRESS_1); // Need this line for the auto increment. After a read or write the control register is incremented
+    pca9685_write_reg(PCA9685_MODE1, 0x20, PCA9685_I2C_ADDRESS_2);
     sleep_ms(10); // Wait for oscillator to stabilize
-    pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important    
+    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1); // OUTDRV=1 (totem-pole), important    
+    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_2);
     servo_set_us(0, SERVO_MID_US);
     servo_set_us(1, SERVO_MID_US);
     for (int i = 0; i < MOTOR_COUNT; i++) {
@@ -253,32 +267,7 @@ void init_servo_positions(void) {
     sleep_ms(1000);
 }
 
-void test_force(void) {
-    init_i2c();
-    sleep_ms(1000);
-    pca9685_set_pwm_freq(50.0f);
-    sleep_ms(10);
-    pca9685_write_reg(PCA9685_MODE1, 0x20); // Need this line for the auto increment. After a read or write the control register is incremented
-    sleep_ms(10); // Wait for oscillator to stabilize
-    pca9685_write_reg(PCA9685_MODE2, 0x04); // OUTDRV=1 (totem-pole), important
-    
-    
-    while(1) {
-    servo_set_us(0, SERVO_MID_US);
-    servo_set_us(1, SERVO_MID_US);
-    sleep_ms(1000);
-    
-    servo_set_us(0, SERVO_MIN_US + 200);
-    servo_set_us(1, SERVO_MIN_US + 200);
-    sleep_ms(1000);
-
-    servo_set_us(0, SERVO_MID_US);
-    servo_set_us(1, SERVO_MID_US);
-    sleep_ms(1000);
-
-    servo_set_us(0, SERVO_MAX_US - 200);
-    servo_set_us(1, SERVO_MAX_US - 200);
-    sleep_ms(1000);
-    }
-
+void secondpwmtest(uint8_t channel, uint16_t pulse_us) {
+    servo_set_us(channel, pulse_us);
+    // servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index])
 }

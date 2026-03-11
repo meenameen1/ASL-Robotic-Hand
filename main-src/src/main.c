@@ -16,11 +16,10 @@
 
 int main(void) {
    
-   int x;
-   init_servo_positions();
-   char target_letter;
+   // init_servo_positions();
+   // char target_letter;
 
-
+/*
    absolute_time_t start_time_A = get_absolute_time();
    target_letter = 'A';
    move_to_letter(target_letter);
@@ -35,19 +34,47 @@ int main(void) {
    target_letter = 'X';
    move_to_letter(target_letter);
    int64_t elapsed_time_start_to_X = absolute_time_diff_us(start_time_X, get_absolute_time());
+*/
+   init_servo_positions();
+   char target_letter;
 
-   
+   // while(1) {
+   //    secondpwmtest(15, 500);
+   //    sleep_ms(2000);
+   //    secondpwmtest(15, 1600);
+   //    sleep_ms(2000);
 
+   //    secondpwmtest(16, 500);
+   //    sleep_ms(2000);
+   //    secondpwmtest(16, 1600);
+   //    sleep_ms(2000);
+   // }
+   while(1) {
+      target_letter = 'H';
+      move_to_letter(target_letter);
+      sleep_ms(2000);
+      target_letter = 'I';
+      move_to_letter(target_letter);
+      sleep_ms(2000);
+      
+   }
+   // while(1) {
+   //    target_letter = 'A';
+   //    move_to_letter(target_letter);
+   //    sleep_ms(2000);
+   //    target_letter = 'B';
+   //    move_to_letter(target_letter);
+   //    sleep_ms(2000);
+   //    target_letter = 'X';
+   //    move_to_letter(target_letter);
+   //    sleep_ms(2000);
+   // }
 
-
-   x=1;
-
-
-   
+   /*
    usb_init();
    while(1) {
       usb_task();
-   }
+   }*/
 }
 
 
