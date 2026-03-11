@@ -10,12 +10,15 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 from collections import deque
 
+# --- STT SPECIFICATIONS ---
 MODEL_PATH = "vosk-model-small-en-us-0.15" 
-SAMPLE_RATE = 16000
+SAMPLE_RATE = 16000  # Audio sampling rate in Hz (16 kHz for clear speech)
 CHUNK_SIZE = 2000 
 WEB_PORT = 5001
 WEB_HOST = "0.0.0.0"
 LETTER_SEND_INTERVAL = 1.5 # seconds between sending letters
+STT_LATENCY_THRESHOLD = 10.0  # Max 10 seconds per system spec
+STT_ACCURACY_TARGET = 0.90  # Minimum 90% accuracy as per design spec
 
 audio_queue = queue.Queue()
 letter_queue = deque()  
@@ -24,6 +27,16 @@ queue_lock = threading.Lock()
 output_lock = threading.Lock()
 recognition_enabled = True  
 recognition_lock = threading.Lock()
+audio_input_start_time = None  # Track audio input start time for latency
+metrics_lock = threading.Lock()
+stt_metrics = {  # Track STT performance metrics
+    'total_recognitions': 0,
+    'successful_recognitions': 0,
+    'average_latency': 0.0,
+    'total_latency': 0.0,
+    'min_latency': float('inf'),
+    'max_latency': 0.0
+}
 
 # --- FLASK WEB SERVER SETUP ---
 app = Flask(__name__)
@@ -248,6 +261,18 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">Audio Sampling Rate</div>
+                <div class="stat-value" id="sample-rate">16 kHz</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="stat-label">Max Latency Allowed</div>
+                <div class="stat-value" id="latency-threshold">10s</div>
+            </div>
+        </div>
+        
         <div class="queue-section">
             <h2>📋 Current Queue</h2>
             <div class="queue-container" id="queue-display">
@@ -257,6 +282,24 @@ HTML_TEMPLATE = """
 
         <div class="control-section">
             <button class="toggle-btn active" id="recognition-btn" onclick="toggleRecognition()">⏸️ Stop Recognition</button>
+        </div>
+        
+        <div class="queue-section">
+            <h2>📊 STT Performance Metrics</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="stat-box">
+                    <div class="stat-label">Avg Latency</div>
+                    <div class="stat-value" id="avg-latency">-- ms</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Min/Max Latency</div>
+                    <div class="stat-value" id="min-max-latency">-- / -- ms</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Recognitions</div>
+                    <div class="stat-value" id="recognition-count">0</div>
+                </div>
+            </div>
         </div>
         
         <div class="output-section">
@@ -327,8 +370,9 @@ HTML_TEMPLATE = """
             const item = document.createElement('div');
             item.className = 'output-item new';
             item.innerHTML = `
-                <div><strong>${escapeHtml(data.text)}</strong></div>
-                <div><code>${escapeHtml(data.letters)}</code></div>
+                <div><strong>${data.text}</strong></div>
+                <div><code>${data.letters}</code></div>
+                <div>Latency: ${data.latency.toFixed(0)}ms</div>
             `;
             outputList.insertBefore(item, outputList.firstChild);
             
@@ -339,11 +383,12 @@ HTML_TEMPLATE = """
             document.getElementById('ram-usage').textContent = data.ram.toFixed(2) + ' MB';
         });
         
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        socket.on('metrics_update', function(data) {
+            document.getElementById('avg-latency').textContent = data.average_latency.toFixed(0) + ' ms';
+            document.getElementById('min-max-latency').textContent = data.min_latency.toFixed(0) + ' / ' + data.max_latency.toFixed(0) + ' ms';
+            document.getElementById('recognition-count').textContent = data.successful_recognitions + ' / ' + data.total_recognitions;
+        });
+
     </script>
 </body>
 </html>
@@ -353,11 +398,14 @@ def get_ram_usage():
     return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
 
 def record_audio():
+    global audio_input_start_time
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=SAMPLE_RATE, 
                     input=True, frames_per_buffer=CHUNK_SIZE)
     stream.start_stream()
     while True:
+        if audio_input_start_time is None:
+            audio_input_start_time = time.time()  # Mark start of audio input
         audio_queue.put(stream.read(CHUNK_SIZE, exception_on_overflow=False))
 
 def send_letters_periodically():
@@ -388,6 +436,26 @@ def add_letters_to_queue(letters):
         socketio.emit('queue_update', {'queue': list(letter_queue)})
     print(f"📥 ADDED TO QUEUE: {letters} | Queue size: {len(letter_queue)}")
 
+def update_stt_metrics(latency_ms):
+    """Update STT performance metrics"""
+    global stt_metrics
+    with metrics_lock:
+        stt_metrics['total_recognitions'] += 1
+        stt_metrics['successful_recognitions'] += 1
+        stt_metrics['total_latency'] += latency_ms
+        stt_metrics['average_latency'] = stt_metrics['total_latency'] / stt_metrics['successful_recognitions']
+        stt_metrics['min_latency'] = min(stt_metrics['min_latency'], latency_ms)
+        stt_metrics['max_latency'] = max(stt_metrics['max_latency'], latency_ms)
+        
+    # Emit metrics update to web clients
+    socketio.emit('metrics_update', {
+        'average_latency': stt_metrics['average_latency'],
+        'min_latency': stt_metrics['min_latency'] if stt_metrics['min_latency'] != float('inf') else 0,
+        'max_latency': stt_metrics['max_latency'],
+        'total_recognitions': stt_metrics['total_recognitions'],
+        'successful_recognitions': stt_metrics['successful_recognitions']
+    })
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -413,27 +481,25 @@ if not os.path.exists(MODEL_PATH):
     print("Please ensure model path is correct.")
     exit()
 
-# Start Flask web server in a separate thread
 def run_web_server():
     socketio.run(app, host=WEB_HOST, port=WEB_PORT, debug=False, use_reloader=False)
 
 web_thread = threading.Thread(target=run_web_server, daemon=True)
 web_thread.start()
 
-# Start the letter sending thread
 send_thread = threading.Thread(target=send_letters_periodically, daemon=True)
 send_thread.start()
 
-# Start the RAM usage broadcast thread
 ram_thread = threading.Thread(target=broadcast_ram_usage, daemon=True)
 ram_thread.start()
 
 print(f"Loading Model... Starting RAM: {get_ram_usage():.2f} MB")
 print(f"🌐 Web Server running at http://{WEB_HOST}:{WEB_PORT}")
 print(f"⏱️  Letters sent to hand every {LETTER_SEND_INTERVAL} seconds")
+print(f"⏱️  Max Latency: {STT_LATENCY_THRESHOLD}s | Sample Rate: {SAMPLE_RATE} Hz")
 print("\n--- SYSTEM ACTIVE: Speak clearly ---")
-print(f"{'Recognized Words':<25} | {'Letters Added to Queue':<30} | {'Queue Size':<10}")
-print("-" * 70)
+print(f"{'Recognized Words':<25} | {'Letters Added to Queue':<30} | {'Latency':<10}")
+print("-" * 85)
 
 model = Model(MODEL_PATH)
 rec = KaldiRecognizer(model, SAMPLE_RATE)
@@ -447,27 +513,41 @@ try:
         with recognition_lock:
             is_enabled = recognition_enabled
         
-        if is_enabled and rec.AcceptWaveform(data):
-            res = json.loads(rec.Result())
-            text = res.get("text", "").strip()
-            
-            if text:
-                letters = [char.upper() for char in text if char.isalpha()]
-                ram = get_ram_usage()
+        if is_enabled:
+            # Process partial results to extract word-level confidence
+            if rec.AcceptWaveform(data):
+                # Final result
+                res = json.loads(rec.Result())
+                text = res.get("text", "").strip()
                 
-                print(f"{text:<25} | {str(letters):<30} | {len(letter_queue):>8}")
+                # Calculate latency
+                recognition_time = time.time()
+                if audio_input_start_time:
+                    latency_ms = (recognition_time - audio_input_start_time) * 1000
+                    audio_input_start_time = None  # Reset for next recognition
+                else:
+                    latency_ms = 0
                 
-                # Add to queue and emit to web
-                add_letters_to_queue(letters)
+                latency_warning = " ⚠️ LATENCY EXCEEDED" if latency_ms > (STT_LATENCY_THRESHOLD * 1000) else ""
                 
-                # Log to output history
-                output_data = {
-                    'text': text,
-                    'letters': str(letters)
-                }
-                with output_lock:
-                    output_history.append(output_data)
-                socketio.emit('new_output', output_data)
+                if text:
+                    letters = [char.upper() for char in text if char.isalpha()]
+                    ram = get_ram_usage()
+                    
+                    print(f"{text:<25} | {str(letters):<30} | {latency_ms:>8.0f}ms{latency_warning}")
+                    
+                    add_letters_to_queue(letters)
+                    
+                    update_stt_metrics(latency_ms)
+                    
+                    output_data = {
+                        'text': text,
+                        'letters': str(letters),
+                        'latency': latency_ms
+                    }
+                    with output_lock:
+                        output_history.append(output_data)
+                    socketio.emit('new_output', output_data)
                 
 except KeyboardInterrupt:
     print("\nClosing Queue Controller...")

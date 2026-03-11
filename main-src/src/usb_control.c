@@ -6,6 +6,7 @@
 static Keyboard_Device_t* kbd;
 
 
+#include "letters.h"
 // --------------------------------------------------------------------+
 // ASCII Lookup Table (Letters, Numbers, Space, Enter)
 // First column is unshifted, second colwumn is shifted
