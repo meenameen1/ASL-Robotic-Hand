@@ -7,6 +7,7 @@
 
 #define MAX_FLEX 500
 #define MAX_EXTEND 1600
+#define ANGLE_45 1050
 
 int letter_index(char c) {
     if (c < 'A') return 0;
@@ -16,12 +17,12 @@ int letter_index(char c) {
 
 const HandPose hand_poses[LETTER_COUNT] = {
     // MOTOR 1, MOTOR 2, MOTOR 3, MOTOR 4, MOTOR 5, MOTOR 6, MOTOR 7, MOTOR 8, MOTOR 9, MOTOR 10, MOTOR 11, MOTOR 12, MOTOR 13, MOTOR 14, MOTOR 15, MOTOR 16, MOTOR 17, MOTOR 18, MOTOR 19, MOTOR 20, MOTOR 21, MOTOR 22
-    {{MAX_FLEX, MAX_FLEX, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter A
-    {{MAX_EXTEND, MAX_EXTEND, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter B
-    {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter C
+    {{MAX_FLEX, MAX_FLEX, 0, 0, MAX_FLEX, MAX_FLEX, 0, 0, MAX_FLEX, MAX_FLEX, 0, 0, MAX_FLEX, MAX_FLEX, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter A
+    {{MAX_EXTEND, MAX_EXTEND, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter B
+    {{ANGLE_45, ANGLE_45, 0, 0, ANGLE_45, ANGLE_45, 0, 0, ANGLE_45, ANGLE_45, 0, 0, ANGLE_45, ANGLE_45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter C
     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter D
     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter E
-    {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter F
+    {{MAX_FLEX, MAX_FLEX, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, MAX_EXTEND, MAX_EXTEND, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter F
     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, // Letter G
     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, MAX_EXTEND, MAX_FLEX, 0, 0, 0, 0, 0}}, // Letter H
     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, MAX_FLEX, MAX_EXTEND, 0, 0, 0, 0, 0}}, // Letter I

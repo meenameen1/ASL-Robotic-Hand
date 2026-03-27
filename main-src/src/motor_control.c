@@ -195,8 +195,13 @@ static void pca9685_init_for_servos(void) {
 
 
 void move_to_letter(char target_letter) {
-    for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
+    if(target_letter == 'J' || target_letter == 'Z') {
+        // need to implement double movements here
+    }
+    else{
+        for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
         servo_set_us(servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index]);
+        }
     }
 }
 
