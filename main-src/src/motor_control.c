@@ -265,9 +265,9 @@ void init_servo_positions(void) {
     sleep_ms(10); // Wait for oscillator to stabilize
     pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1); // OUTDRV=1 (totem-pole), important    
     pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_2);
-    servo_set_us(0, SERVO_MID_US);
-    servo_set_us(1, SERVO_MID_US);
+    
     for (int i = 0; i < MOTOR_COUNT; i++) {
+        servo_set_us(i, SERVO_MID_US);
         current_us_values[i] = SERVO_MID_US;
     }
     sleep_ms(1000);
