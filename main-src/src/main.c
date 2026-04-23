@@ -49,12 +49,13 @@ int main(void)
    }
    else {
       char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
-      // char letters_to_test[] = {'P', 'Q'};
+      // char letters_to_test[] = {'J', 'Z'};
       while(1) {
          init_servo_positions();
          sleep_ms(2000);
          for (int i = 0; i < sizeof(letters_to_test); i++) {
-            move_to_letter(letters_to_test[i]);
+            // move_to_letter(letters_to_test[i]);
+            move_to_letter_smoothly(letters_to_test[i], 50, 50);
             sleep_ms(2000);
          }
       }

@@ -4,13 +4,23 @@
 #include <stdint.h>
 
 #define MOTOR_COUNT 24
-#define LETTER_COUNT 26
+// #define LETTER_COUNT 26
+#define POSE_COUNT 34
+
+#define POSE_J1 26
+#define POSE_J2 27
+#define POSE_J3 28
+#define POSE_J4 29
+#define POSE_Z1 30
+#define POSE_Z2 31
+#define POSE_Z3 32
+#define POSE_Z4 33
 
 typedef struct {
     int motor_positions[MOTOR_COUNT];
 } HandPose;
 
-extern const HandPose hand_poses[LETTER_COUNT];
+extern const HandPose hand_poses[POSE_COUNT];
 
 void move_to_letter(char target_letter);
 void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms);

@@ -206,52 +206,80 @@ void move_to_letter(char target_letter) {
     }
 }
 
-void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms) {
-    if(step_size_us <= 0) step_size_us = 5;
-    if(tick_time_ms <= 0) tick_time_ms = 5;
+int clamp_us(int value) {
+    if (value < SERVO_MIN_US) return SERVO_MIN_US;
+    if (value > SERVO_MAX_US) return SERVO_MAX_US;
+    return value;
+}
 
-    while(1) {
+void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time_ms) {
+    if (step_size_us <= 0) step_size_us = 5;
+    if (tick_time_ms <= 0) tick_time_ms = 5;
+
+    int pose_index = letter_index(target_letter);
+
+    // Optional safety check, depending on how letter_index works
+    if (pose_index < 0) {
+        return;
+    }
+
+    // Match behavior of move_to_letter()
+    if (target_letter == 'J') {
+        move_to_letter_smoothly(POSE_J1, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_J2, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_J3, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_J4, step_size_us, tick_time_ms);
+        return;
+    }
+    else if (target_letter == 'Z') {
+        move_to_letter_smoothly(POSE_Z1, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_Z2, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_Z3, step_size_us, tick_time_ms);
+        move_to_letter_smoothly(POSE_Z4, step_size_us, tick_time_ms);
+        return;
+    }
+
+    while (1) {
         bool complete = true;
 
         for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
+            int target = hand_poses[pose_index].motor_positions[servo_index];
+            target = clamp_us(target);
 
-            int target = hand_poses[letter_index(target_letter)].motor_positions[servo_index];
             int current = current_us_values[servo_index];
-            
-            if(current < target) {
+            current = clamp_us(current);
+
+            if (current < target) {
                 current += step_size_us;
-                if(current > target) {
+
+                if (current > target) {
                     current = target;
-                    complete = true;
-                }
-                else {
-                    complete = false;
                 }
             }
-            else if(current > target) {
+            else if (current > target) {
                 current -= step_size_us;
-                if(current < target) {
+
+                if (current < target) {
                     current = target;
-                    complete = true;
                 }
-                else {
-                    complete = false;
-                }
-                
             }
 
-            if (current < SERVO_MIN_US) current = SERVO_MIN_US;
-            if (current > SERVO_MID_US) current = SERVO_MID_US;
+            current = clamp_us(current);
+
+            if (current != target) {
+                complete = false;
+            }
 
             current_us_values[servo_index] = current;
             servo_set_us(servo_index, (uint16_t)current);
         }
-        if(complete == true){
+
+        if (complete) {
             return;
         }
+
         sleep_ms(tick_time_ms);
     }
-    
 }
 
 void init_servo_positions(void) {
