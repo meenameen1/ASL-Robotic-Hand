@@ -30,11 +30,17 @@ spi_inst_t *SPI = spi0; // Use SPI0 for the LCD
 #define DC_HIGH do { gpio_put(DC_NUM, 1); } while(0)
 #define DC_LOW  do { gpio_put(DC_NUM, 0); } while(0)
 
-#define PIN_SDI    7
 #define PIN_CS     5
-#define PIN_SCK    6
+#define PIN_nRESET 8
 #define PIN_DC     3
-#define PIN_nRESET 4
+#define PIN_SDI    7
+#define PIN_SCK    6
+//Original
+// #define PIN_SDI    7
+// #define PIN_CS     5
+// #define PIN_SCK    6
+// #define PIN_DC     3
+// #define PIN_nRESET 4
 
 void init_spi_lcd() {
     gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
@@ -857,7 +863,7 @@ const unsigned char asc2_1608[95][16]={
 // 95 chars * 32 rows * 2 bytes = 6,080 bytes
 uint8_t asc2_3216[95][64];
 
-// Run this once at boot/startup
+// Run this once at boot/startup to generate the stretched font from the original 16x8 font.
 void init_stretched_font(void) {
     for (int char_idx = 0; char_idx < 95; char_idx++) {
 

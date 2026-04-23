@@ -16,12 +16,18 @@ typedef uint32_t OLED_mode_t;
 typedef enum
 {
     OLED_MODE_DEFAULT,
+    OLED_MODE_LEARN,
+    OLED_MODE_TRANSATE,
     OLED_MODE_KEYBOARD_DISCONNECTED,
     OLED_MODE_TYPING,
     OLED_MODE_TRANSLATING,
     OLED_MODE_ERROR,
 } OLED_Mode_t;
 
-void display_screen(OLED_mode_t oled_mode);
+typedef struct {
+    OLED_Mode_t current_mode;
+} OLED_Display_t;
+
+void display_screen(OLED_Display_t* oled, OLED_Mode_t oled_mode);
 
 #endif

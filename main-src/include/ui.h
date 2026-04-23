@@ -19,7 +19,7 @@ typedef struct
    UI_State_t state;
    Keyboard_Device_t* keyboard;
    LCD_t* lcd;
-   OLED_Mode_t oled_mode;
+   OLED_Display_t* oled;
 } UI_Context_t;
 
 void ui_state_machine(UI_Context_t* ui);

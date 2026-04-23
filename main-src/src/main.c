@@ -28,7 +28,10 @@ int main(void)
    //Running UI stuff on core 1
    multicore_launch_core1(core1_operation);
 
-   
+   gpio_init(22);
+   gpio_set_dir(22, GPIO_OUT);
+   gpio_put(22, 0); // Start with power off
+
 
    bool calibrate_new_motor = false;
    int init_port = 21;
@@ -62,5 +65,44 @@ int main(void)
          // sleep_ms(2000);
 
       // }
-   }  
+   } 
+}
+// This function will run on the second core and handle all USB, LCD, OLED, and UI logic
+void core1_operation(void)
+{
+   Keyboard_Device_t keyboard =
+   {
+       .last_key = 0,
+       .key_ready = false
+   };
+   usb_init(&keyboard);
+
+   OLED_Display_t oled = {
+      .current_mode = OLED_MODE_DEFAULT
+   };
+   oled_init(&oled);
+
+   LCD_t lcd =
+   {
+         .display_buffer = {0},
+         .len = 0
+   };
+   init_spi_lcd();
+
+
+   UI_Context_t ui_context =
+   {
+      .state = STATE_IDLE,
+      .keyboard = &keyboard,
+      .lcd = &lcd,
+      .oled = &oled
+   };
+
+   usb_initPeripherals(&keyboard);
+   setUsbPowerOutput(1);
+   while(1)
+   {
+      usb_task();
+      ui_state_machine(&ui_context);
+   }
 }

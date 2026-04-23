@@ -97,8 +97,9 @@ void cd_display2(const char *str, bool show_arrow) {
     }
 }
 
-void display_screen(OLED_mode_t oled_mode)
+void display_screen(OLED_Display_t* oled, OLED_Mode_t oled_mode)
 {
+
     switch(oled_mode)
     {
         case OLED_MODE_DEFAULT:
@@ -106,34 +107,47 @@ void display_screen(OLED_mode_t oled_mode)
             cd_display1("ASL Robotic Hand", 0);
             cd_display2("Translator", 1);
             break;
+        case OLED_MODE_LEARN:
+            clear_display();
+            cd_display1("Learn Mode", 1);
+            cd_display2("Active", 1);
+            break;
+        case OLED_MODE_TRANSATE:
+            clear_display();
+            cd_display1("Translate Mode", 1);
+            cd_display2("Active", 0);
+            break;
+         case OLED_MODE_ERROR:
+            clear_display();
+            cd_display1("Error!", 0);
+            cd_display2("", 0);
+            break;
+         case OLED_MODE_TYPING:
+            clear_display();
+            cd_display1("Typing...", 0);
+            cd_display2("", 0);
+            break;
+         case OLED_MODE_TRANSLATING:
+            clear_display();
+            cd_display1("Translating...", 0);
+            cd_display2("", 0);
+            break;
         case OLED_MODE_KEYBOARD_DISCONNECTED:
             clear_display();
             cd_display1("Keyboard", 0);
             cd_display2("Disconnected", 0);
             break;
-        case OLED_MODE_TYPING:
-            clear_display();
-            cd_display1("Typing...", 0);
-            cd_display2("", 0);
-            break;
-        case OLED_MODE_TRANSLATING:
-            clear_display();
-            cd_display1("Translating...", 0);
-            cd_display2("", 0);
-            break;
-        case OLED_MODE_ERROR:
-            clear_display();
-            cd_display1("Error!", 0);
-            cd_display2("", 0);
-            break;
-}
+    }
+
+    oled->current_mode = oled_mode;
 }
 
 
-void oled_init()
+void oled_init(OLED_Display_t* oled)
 {
     init_chardisp_pins();
     cd_init();
+    display_screen(oled, OLED_MODE_DEFAULT);
     // uint32_t initialTime = timer_hw->timerawl;
     // cd_display1("ASL Robotic Hand",0);
     // cd_display2("Translator",1);
