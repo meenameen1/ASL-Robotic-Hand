@@ -6,18 +6,27 @@
 #include "usb_control.h"
 #include "oled.h"
 #include "pico/stdlib.h"
+#include "usb_control.h"
+#include "oled.h"
+#include "lcd.h"
+#include "ui.h"
+#include "pico/multicore.h"
 
+#include <math.h>
 #include "pico/stdio_usb.h"
-
 #include "letters.h"
-
 #include "pico/time.h"
 
+void core1_operation(void);
 
-int main(void) {
-   
-   // init_servo_positions();
-   // char target_letter;
+int main(void)
+{
+
+   stdio_init_all();
+   sleep_ms(500);
+
+   //Running UI stuff on core 1
+   multicore_launch_core1(core1_operation);
 
    
 
