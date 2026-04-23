@@ -195,8 +195,14 @@ static void pca9685_init_for_servos(void) {
 
 
 void move_to_letter(char target_letter) {
-    for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
+    if(target_letter == 'J') {
+    }
+    else if(target_letter == 'Z') {
+    }
+    else{
+        for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
         servo_set_us(servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index]);
+        }
     }
 }
 
@@ -260,9 +266,9 @@ void init_servo_positions(void) {
     sleep_ms(10); // Wait for oscillator to stabilize
     pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1); // OUTDRV=1 (totem-pole), important    
     pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_2);
-    servo_set_us(0, SERVO_MID_US);
-    servo_set_us(1, SERVO_MID_US);
+    
     for (int i = 0; i < MOTOR_COUNT; i++) {
+        servo_set_us(i, SERVO_MID_US);
         current_us_values[i] = SERVO_MID_US;
     }
     sleep_ms(1000);
