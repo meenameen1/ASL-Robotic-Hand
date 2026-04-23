@@ -28,16 +28,21 @@ int main(void)
    //Running UI stuff on core 1
    multicore_launch_core1(core1_operation);
 
+   gpio_init(22);
+   gpio_set_dir(22, GPIO_OUT);
+   gpio_put(22, 0); // Start with power off
+
    init_servo_positions();
    char target_letter;
 
    while(1) {
       target_letter = 'H';
-      move_to_letter(target_letter);
+      secondpwmtest(16,2000);
+      // move_to_letter(target_letter);
       // move_to_letter_smoothly(target_letter, 100, 20);
       sleep_ms(2000);
-      target_letter = 'I';
-      move_to_letter(target_letter);
+      target_letter = 'A';
+      // move_to_letter(target_letter);
       // move_to_letter_smoothly(target_letter, 10, 10);
       sleep_ms(2000);
    }
@@ -52,7 +57,10 @@ void core1_operation(void)
    };
    usb_init(&keyboard);
 
-   oled_init();
+   OLED_Display_t oled = {
+      .current_mode = OLED_MODE_DEFAULT
+   };
+   oled_init(&oled);
 
    LCD_t lcd =
    {
@@ -67,8 +75,11 @@ void core1_operation(void)
       .state = STATE_IDLE,
       .keyboard = &keyboard,
       .lcd = &lcd,
+      .oled = &oled
    };
 
+   usb_initPeripherals(&keyboard);
+   setUsbPowerOutput(1);
    while(1)
    {
       usb_task();

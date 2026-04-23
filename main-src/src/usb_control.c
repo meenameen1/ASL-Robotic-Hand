@@ -2,9 +2,14 @@
 #include "tusb.h"
 #include "usb_control.h"
 #include "hardware/timer.h"
+#include "hardware/gpio.h"
+#include "hardware/irq.h"
+
+#define USB320_ID_GPIO 2
+#define USB_POWERSWITCH_EN_GPIO 46
+#define USB_POWERSWITCH_FLG_GPIO 47
 
 static Keyboard_Device_t* kbd;
-
 
 #include "letters.h"
 // --------------------------------------------------------------------+
@@ -86,7 +91,61 @@ void usb_init(Keyboard_Device_t *keyboard)
 {
     kbd = keyboard;
     kbd->connected = false;
+
+    // setUsbPowerOutput(1);
     tusb_init();
+}
+
+void setUsbPowerOutput(bool power_on)
+{
+    gpio_put(USB_POWERSWITCH_EN_GPIO, power_on ? 1 : 0);
+}
+
+void USB320_ID_GPIO_callback(uint gpio, uint32_t events)
+{
+    //Device Attached
+    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
+        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL);
+        kbd->device_attached = ID_DEVICE_ATTACHED;
+        setUsbPowerOutput(true);
+    }
+    //Host/ Nothing Attached
+    else if(gpio_get_irq_event_mask(USB320_ID_GPIO) & GPIO_IRQ_EDGE_RISE) {
+        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_RISE);
+        // Host or nothing attached
+        kbd->device_attached = ID_HOST_ATTACHED;
+         setUsbPowerOutput(false);
+    }
+}
+
+void AP2171_FLG_GPIO_callback(uint gpio, uint32_t events)
+{
+    //Power Switch Flag triggered (overcurrent or overtemp)
+    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
+        gpio_acknowledge_irq(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL);
+        setUsbPowerOutput(false); // Cut power to the USB device
+    }
+}
+
+void usb_initPeripherals(Keyboard_Device_t *kbd)
+{
+    // Initialize GPIOs for USB power control and detection
+    gpio_init(USB320_ID_GPIO);
+    gpio_set_dir(USB320_ID_GPIO, GPIO_IN);
+    gpio_pull_up(USB320_ID_GPIO);
+    //Setup interrupt for USB ID pin to detect when a device/host is attached or detached
+    gpio_set_irq_enabled_with_callback(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, USB320_ID_GPIO_callback);
+
+    gpio_init(USB_POWERSWITCH_EN_GPIO);
+    gpio_set_dir(USB_POWERSWITCH_EN_GPIO, GPIO_OUT);
+    gpio_put(USB_POWERSWITCH_EN_GPIO, 0); // Start with power off
+
+    gpio_init(USB_POWERSWITCH_FLG_GPIO);
+    gpio_set_dir(USB_POWERSWITCH_FLG_GPIO, GPIO_IN);
+    gpio_pull_up(USB_POWERSWITCH_FLG_GPIO);
+    gpio_set_irq_enabled_with_callback(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL, true, AP2171_FLG_GPIO_callback);
+
+
 }
 
 // --------------------------------------------------------------------+

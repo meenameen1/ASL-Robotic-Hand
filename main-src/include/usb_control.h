@@ -10,15 +10,24 @@
 #define ARROW_RIGHT 131
 #define ENTER       132
 
+#define ID_DEVICE_ATTACHED 0
+#define ID_HOST_ATTACHED 1
+
 typedef struct {
-    char last_key;
+    uint32_t start_time_us;
+    uint32_t device_attached;
     bool key_ready;
     bool connected;
-    uint32_t start_time_us;
+    char last_key;
+
 } Keyboard_Device_t;
 
 void usb_task(void);
+void usb_initPeripherals(Keyboard_Device_t *kbd);
 void usb_init(Keyboard_Device_t *kbd);
+void setUsbPowerOutput(bool on);
+void getDeviceAttached();
+
 
 
 #endif
