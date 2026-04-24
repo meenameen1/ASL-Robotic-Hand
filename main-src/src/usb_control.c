@@ -1,9 +1,20 @@
 #include "tusb_config.h"
 #include "tusb.h"
+#include "usb_control.h"
+#include "hardware/timer.h"
+#include "hardware/gpio.h"
+#include "hardware/irq.h"
 
+#define USB320_ID_GPIO 2
+#define USB_POWERSWITCH_EN_GPIO 46
+#define USB_POWERSWITCH_FLG_GPIO 47
+
+static Keyboard_Device_t* kbd;
+
+#include "letters.h"
 // --------------------------------------------------------------------+
 // ASCII Lookup Table (Letters, Numbers, Space, Enter)
-// First column is unshifted, second column is shifted
+// First column is unshifted, second colwumn is shifted
 // --------------------------------------------------------------------+
 static const char keycode2ascii[128][2] = {
     [HID_KEY_A] = {'a', 'A'}, [HID_KEY_B] = {'b', 'B'}, [HID_KEY_C] = {'c', 'C'},
@@ -19,12 +30,16 @@ static const char keycode2ascii[128][2] = {
     [HID_KEY_4] = {'4', '$'}, [HID_KEY_5] = {'5', '%'}, [HID_KEY_6] = {'6', '^'},
     [HID_KEY_7] = {'7', '&'}, [HID_KEY_8] = {'8', '*'}, [HID_KEY_9] = {'9', '('},
     [HID_KEY_0] = {'0', ')'},
-    [HID_KEY_ENTER] = {'\n', '\n'}, [HID_KEY_SPACE] = {' ', ' '},
+    [HID_KEY_ENTER] = {ENTER, ENTER}, [HID_KEY_SPACE] = {' ', ' '},
+    [HID_KEY_BACKSPACE] = {'\b', '\b'},
+    [HID_KEY_ARROW_DOWN] = {ARROW_UP, ARROW_UP}, [HID_KEY_ARROW_UP] = {ARROW_DOWN, ARROW_DOWN},
 };
 
 // --------------------------------------------------------------------+
 // Application Logic
 // --------------------------------------------------------------------+
+
+
 
 // Helper function to check if a specific keycode is currently in a report
 static inline bool is_key_held(hid_keyboard_report_t const *report, uint8_t keycode) {
@@ -38,6 +53,9 @@ static inline bool is_key_held(hid_keyboard_report_t const *report, uint8_t keyc
 void process_kbd_report(hid_keyboard_report_t const *report) {
     // Keep track of the last report so we only print new key presses
     static hid_keyboard_report_t prev_report = { 0 };
+
+
+    kbd->start_time_us = timer_hw->timerawl;
 
     // Check if Left Shift or Right Shift is being held down
     bool is_shift = report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
@@ -53,9 +71,9 @@ void process_kbd_report(hid_keyboard_report_t const *report) {
             char ch = keycode2ascii[keycode][is_shift ? 1 : 0];
 
             if (ch) {
-                // Print the character directly to the terminal!
-                printf("%c", ch);
-                fflush(stdout); // Ensure it prints immediately
+                // Give give to struct and set the ready flag
+                kbd->last_key = ch;
+                kbd->key_ready = true;
             }
         }
     }
@@ -69,9 +87,65 @@ void usb_task(void)
    tuh_task();
 }
 
-void usb_init()
+void usb_init(Keyboard_Device_t *keyboard)
 {
-   tusb_init();
+    kbd = keyboard;
+    kbd->connected = false;
+
+    // setUsbPowerOutput(1);
+    tusb_init();
+}
+
+void setUsbPowerOutput(bool power_on)
+{
+    gpio_put(USB_POWERSWITCH_EN_GPIO, power_on ? 1 : 0);
+}
+
+void USB320_ID_GPIO_callback(uint gpio, uint32_t events)
+{
+    //Device Attached
+    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
+        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL);
+        kbd->device_attached = ID_DEVICE_ATTACHED;
+        setUsbPowerOutput(true);
+    }
+    //Host/ Nothing Attached
+    else if(gpio_get_irq_event_mask(USB320_ID_GPIO) & GPIO_IRQ_EDGE_RISE) {
+        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_RISE);
+        // Host or nothing attached
+        kbd->device_attached = ID_HOST_ATTACHED;
+         setUsbPowerOutput(false);
+    }
+}
+
+void AP2171_FLG_GPIO_callback(uint gpio, uint32_t events)
+{
+    //Power Switch Flag triggered (overcurrent or overtemp)
+    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
+        gpio_acknowledge_irq(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL);
+        setUsbPowerOutput(false); // Cut power to the USB device
+    }
+}
+
+void usb_initPeripherals(Keyboard_Device_t *kbd)
+{
+    // Initialize GPIOs for USB power control and detection
+    gpio_init(USB320_ID_GPIO);
+    gpio_set_dir(USB320_ID_GPIO, GPIO_IN);
+    gpio_pull_up(USB320_ID_GPIO);
+    //Setup interrupt for USB ID pin to detect when a device/host is attached or detached
+    gpio_set_irq_enabled_with_callback(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, USB320_ID_GPIO_callback);
+
+    gpio_init(USB_POWERSWITCH_EN_GPIO);
+    gpio_set_dir(USB_POWERSWITCH_EN_GPIO, GPIO_OUT);
+    gpio_put(USB_POWERSWITCH_EN_GPIO, 0); // Start with power off
+
+    gpio_init(USB_POWERSWITCH_FLG_GPIO);
+    gpio_set_dir(USB_POWERSWITCH_FLG_GPIO, GPIO_IN);
+    gpio_pull_up(USB_POWERSWITCH_FLG_GPIO);
+    gpio_set_irq_enabled_with_callback(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL, true, AP2171_FLG_GPIO_callback);
+
+
 }
 
 // --------------------------------------------------------------------+
@@ -80,12 +154,13 @@ void usb_init()
 
 // 1. Invoked when a device is plugged in
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
-    printf("\n[Keyboard Connected]\n");
+    kbd->connected = true;
     tuh_hid_receive_report(dev_addr, instance);
 }
 
 // 2. Invoked when a device is unplugged
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
+    kbd->connected = false;
     printf("\n[Keyboard Disconnected]\n");
 }
 
