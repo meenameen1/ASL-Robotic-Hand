@@ -3,15 +3,21 @@ stt_send.py
 ────────────────────────────────────────────────────────────────────────────────
 Listens to the microphone, transcribes speech with moonshine-voice, strips the
 transcripts down to lowercase letters + spaces, and streams them one at a
-time to a Raspberry Pi Pico (RP2350) over USB serial at 2-second intervals.
+time to a Raspberry Pi Pico (RP2350) over the Pi 4's hardware UART at
+2-second intervals.
 
-Behaviour:
-  • Mic detected (default: USB device index 2)  -> capture + STT are active
-  • Mic unplugged                               -> STT pauses, queue keeps
-                                                   draining to the Pico
-  • Mic replugged                               -> capture auto-resumes
-  • Queue is capped at ~2 conversational sentences; oldest letters are
-    dropped when full so the robot stays near-real-time with live speech.
+Hardware transport:
+  The Pi 4 sits on top of the custom PCB via its 40-pin GPIO header (J43).
+  The board routes Pi GPIO14 (TX) and GPIO15 (RX) to the RP2350's UART1
+  pins (GPIO20/21), so no USB cable or jumper wires are needed between
+  the two controllers. The Pi's serial device is /dev/serial0.
+
+Prerequisites (one-time setup on the Pi 4):
+  sudo raspi-config
+    -> Interface Options -> Serial Port
+    -> Login shell over serial? NO
+    -> Serial port hardware enabled? YES
+    -> Reboot
 
 Install deps:
     pip install moonshine-voice numpy sounddevice scipy pyserial
@@ -29,7 +35,6 @@ from collections import deque
 import numpy as np
 import sounddevice as sd
 import serial                                   # pyserial
-from serial.tools import list_ports
 
 from moonshine_voice import (                   # type: ignore
     Transcriber,
@@ -49,20 +54,19 @@ MIC_POLL_INTERVAL_S      = 1.0         # How often to check for plug/unplug
 LANGUAGE          = "en"
 UPDATE_INTERVAL_S = 0.5
 
-# --- Pico serial link ------------------------------------------------------
-# The Pico typically shows up as /dev/ttyACM0. If you have multiple
-# ACM devices, set this to the exact path (e.g. "/dev/ttyACM1").
-PICO_SERIAL_PORT  = None               # None = auto-detect first ACM device
+# --- Pico UART link --------------------------------------------------------
+# /dev/serial0 is the Pi 4's hardware UART (GPIO14 TX / GPIO15 RX), which
+# is wired on the PCB straight to the RP2350's UART1 pins.
+PICO_SERIAL_PORT  = "/dev/serial0"
 PICO_BAUD_RATE    = 115_200
 
 # --- Fingerspelling cadence ------------------------------------------------
 LETTER_INTERVAL_S = 2.0                # One letter every 2 seconds
-SPACE_CHAR        = " "                # What gets sent between words
 SEND_SPACES       = True               # Letters + spaces (per user choice)
 
 # --- Letter queue ----------------------------------------------------------
-# A conversational sentence averages ~75 characters; cap at ~2 sentences
-# of backlog so the hand stays near real-time with the speaker.
+# ~2 sentences of conversational backlog. Drop-oldest keeps the robot
+# near real-time with live speech when the speaker runs long.
 LETTER_QUEUE_MAX  = 150
 DROP_POLICY       = "oldest"           # "oldest" | "newest"
 
@@ -73,104 +77,76 @@ AUDIO_QUEUE_MAX   = int(4.0 * 1000 / BLOCK_DURATION_MS)
 # ── Letter cleanup ───────────────────────────────────────────────────────────
 
 # Keep a-z only; everything else (digits, punctuation, accents) becomes
-# whitespace, which then collapses into single-space separators below.
+# whitespace, which then collapses into single-space separators.
 _NON_LETTER_RE = re.compile(r"[^a-z]+")
 
 def clean_for_fingerspelling(text: str) -> str:
-    """
-    Transform a moonshine transcript into the exact character stream the
-    robot should sign. Lowercase, letters only, single spaces between words.
-    """
+    """Lowercase; letters only; single spaces between words."""
     lowered  = text.lower()
-    # Collapse any run of non-letters to a single space
     squashed = _NON_LETTER_RE.sub(" ", lowered).strip()
     if not SEND_SPACES:
         squashed = squashed.replace(" ", "")
     return squashed
 
 
-# ── Serial link to the Pico ──────────────────────────────────────────────────
-
-def _auto_detect_pico_port() -> str | None:
-    """Find a USB CDC ACM device (how the Pico exposes itself by default)."""
-    for p in list_ports.comports():
-        dev = p.device
-        if dev.startswith("/dev/ttyACM") or dev.startswith("/dev/ttyUSB"):
-            return dev
-    return None
-
+# ── Serial link to the Pico over UART ────────────────────────────────────────
 
 class PicoLink:
     """
-    Thin serial wrapper. Reopens transparently if the Pico is unplugged and
-    replugged. Writes one character + newline per letter so the Pico can
-    parse on '\\n' boundaries.
+    Thin pyserial wrapper over the Pi 4's hardware UART. Reopens the port
+    transparently if it closes (e.g. the Pico briefly loses power).
+
+    Wire format: one ASCII character + '\\n' per letter, so the Pico can
+    parse with uart.readline().
     """
 
-    def __init__(self, port: str | None, baud: int):
-        self._requested_port = port
+    def __init__(self, port: str, baud: int):
+        self._port = port
         self._baud = baud
         self._serial: serial.Serial | None = None
         self._lock = threading.Lock()
 
-    def _resolve_port(self) -> str | None:
-        return self._requested_port or _auto_detect_pico_port()
-
     def _ensure_open(self) -> bool:
         if self._serial and self._serial.is_open:
             return True
-        port = self._resolve_port()
-        if not port:
-            return False
         try:
             self._serial = serial.Serial(
-                port=port, baudrate=self._baud,
+                port=self._port, baudrate=self._baud,
                 timeout=0.5, write_timeout=1.0,
             )
-            print(f"[Pico] Connected on {port} @ {self._baud} baud")
+            print(f"[Pico] UART open on {self._port} @ {self._baud} baud")
             return True
         except (serial.SerialException, OSError) as exc:
-            print(f"[Pico] Open failed ({port}): {exc}")
+            print(f"[Pico] UART open failed ({self._port}): {exc}")
             self._serial = None
             return False
 
     def send(self, ch: str) -> bool:
-        """Send a single character. Returns True if written, False otherwise."""
         with self._lock:
             if not self._ensure_open():
                 return False
             try:
-                # Send as "<char>\n" so the Pico firmware can readline()
                 self._serial.write(f"{ch}\n".encode("ascii"))
                 self._serial.flush()
                 return True
             except (serial.SerialException, OSError) as exc:
                 print(f"[Pico] Write failed: {exc} — closing port")
-                try:
-                    self._serial.close()
-                except Exception:
-                    pass
+                try: self._serial.close()
+                except Exception: pass
                 self._serial = None
                 return False
 
     def close(self):
         with self._lock:
             if self._serial:
-                try:
-                    self._serial.close()
-                except Exception:
-                    pass
+                try: self._serial.close()
+                except Exception: pass
                 self._serial = None
 
 
 # ── Letter queue with drop-oldest policy ──────────────────────────────────────
 
 class LetterQueue:
-    """
-    Thread-safe deque-backed queue. When full, drops from the configured
-    end so real-time speech wins over backlog.
-    """
-
     def __init__(self, maxlen: int, drop: str = "oldest"):
         self._dq   = deque()
         self._max  = maxlen
@@ -185,7 +161,7 @@ class LetterQueue:
                 if len(self._dq) >= self._max:
                     if self._drop == "oldest":
                         self._dq.popleft()
-                    else:   # "newest"
+                    else:
                         continue
                 self._dq.append(ch)
             self._cv.notify_all()
@@ -206,20 +182,14 @@ class LetterQueue:
 # ── Moonshine listener ───────────────────────────────────────────────────────
 
 class FingerspellListener(TranscriptEventListener):
-    """
-    We only care about *completed* utterances. Partial updates would cause
-    the same prefix letters to be sent repeatedly as the prediction evolves.
-    """
+    """Only completed utterances go into the queue — partials would re-send prefixes."""
 
     def __init__(self, letter_queue: LetterQueue):
         self._letters = letter_queue
         self._last_final_time = 0.0
 
-    def on_line_started(self, event):
-        pass
-
-    def on_line_text_changed(self, event):
-        pass
+    def on_line_started(self, event):  pass
+    def on_line_text_changed(self, event):  pass
 
     def on_line_completed(self, event):
         raw = event.line.text or ""
@@ -227,9 +197,6 @@ class FingerspellListener(TranscriptEventListener):
         if not clean:
             return
 
-        # If it's been a while since the last completed line, prepend a
-        # space so the previous word's last letter isn't run together
-        # with this utterance's first letter.
         now = time.monotonic()
         if SEND_SPACES and self._last_final_time and now - self._last_final_time > 1.5:
             clean = " " + clean
@@ -242,12 +209,7 @@ class FingerspellListener(TranscriptEventListener):
 # ── Microphone presence monitor ──────────────────────────────────────────────
 
 def microphone_present(device_index: int) -> bool:
-    """
-    Return True iff `device_index` currently maps to a valid input device.
-    sd.query_devices refreshes device state, so replugs are visible.
-    """
     try:
-        # Force portaudio to re-scan devices
         sd._terminate()
         sd._initialize()
         info = sd.query_devices(device_index, "input")
@@ -259,16 +221,7 @@ def microphone_present(device_index: int) -> bool:
 # ── STT manager — starts/stops capture as the mic plugs/unplugs ──────────────
 
 class STTManager:
-    """
-    Supervises the audio capture + moonshine stream lifecycle based on
-    whether the configured mic device is present.
-    """
-
-    def __init__(
-        self,
-        letter_queue: LetterQueue,
-        mic_device: int = DEFAULT_MIC_DEVICE_INDEX,
-    ):
+    def __init__(self, letter_queue: LetterQueue, mic_device: int = DEFAULT_MIC_DEVICE_INDEX):
         self._letters    = letter_queue
         self._mic_device = mic_device
         self._stop_event = threading.Event()
@@ -277,7 +230,6 @@ class STTManager:
         self._capture_thread: threading.Thread | None = None
         self._audio_queue: queue.Queue | None = None
 
-        # Moonshine resources (persistent across mic plug/unplug)
         self._transcriber = None
         self._stream      = None
         self._stt_thread: threading.Thread | None = None
@@ -286,26 +238,20 @@ class STTManager:
             target=self._supervise, daemon=True, name="mic-supervisor"
         )
 
-    # ── Lifecycle ────────────────────────────────────────────────────────────
-
     def start(self):
         print("[STT] Loading moonshine-voice model...")
         t0 = time.perf_counter()
         model_path, model_arch = get_model_for_language(LANGUAGE)
         print(f"[STT] Model ready in {time.perf_counter() - t0:.1f}s")
 
-        self._transcriber = Transcriber(
-            model_path=model_path, model_arch=model_arch
-        )
-        self._stream = self._transcriber.create_stream(
-            update_interval=UPDATE_INTERVAL_S
-        )
+        self._transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
+        self._stream = self._transcriber.create_stream(update_interval=UPDATE_INTERVAL_S)
         self._stream.add_listener(FingerspellListener(self._letters))
         self._stream.start()
 
         self._supervisor_thread.start()
-        print("[STT] Supervisor running — listening is active whenever the "
-              f"mic at device index {self._mic_device} is present.")
+        print("[STT] Supervisor running — listening when mic is "
+              f"present at device {self._mic_device}.")
 
     def stop(self, timeout: float = 5.0):
         self._stop_event.set()
@@ -319,8 +265,6 @@ class STTManager:
             except Exception: pass
         print("[STT] Stopped.")
 
-    # ── Capture on/off ───────────────────────────────────────────────────────
-
     def _start_capture(self):
         if self._capture is not None:
             return
@@ -333,7 +277,6 @@ class STTManager:
             target=self._capture.start, daemon=True, name="audio-capture"
         )
         self._capture_thread.start()
-
         self._stt_thread = threading.Thread(
             target=self._feed_loop, daemon=True, name="stt-feed"
         )
@@ -344,19 +287,15 @@ class STTManager:
             return
         print("[STT] Mic gone — pausing capture (queue keeps draining).")
         self._capture.stop()
-        if self._capture_thread:
-            self._capture_thread.join(timeout=2.0)
-        if self._stt_thread:
-            self._stt_thread.join(timeout=2.0)
+        if self._capture_thread: self._capture_thread.join(timeout=2.0)
+        if self._stt_thread:     self._stt_thread.join(timeout=2.0)
         self._capture = None
         self._capture_thread = None
         self._stt_thread = None
         self._audio_queue = None
 
     def _feed_loop(self):
-        """Pull filtered/downsampled blocks and feed them to moonshine."""
-        assert self._audio_queue is not None
-        assert self._stream is not None
+        assert self._audio_queue is not None and self._stream is not None
         while self._capture and not self._stop_event.is_set():
             try:
                 block = self._audio_queue.get(timeout=0.1)
@@ -367,29 +306,21 @@ class STTManager:
             except Exception as exc:
                 print(f"[STT] add_audio error: {exc}")
 
-    # ── Supervisor loop ──────────────────────────────────────────────────────
-
     def _supervise(self):
         last_state: bool | None = None
         while not self._stop_event.is_set():
             present = microphone_present(self._mic_device)
             if present != last_state:
-                if present:
-                    self._start_capture()
-                else:
-                    self._stop_capture()
+                if present: self._start_capture()
+                else:       self._stop_capture()
                 last_state = present
             self._stop_event.wait(MIC_POLL_INTERVAL_S)
 
 
-# ── Pico sender — ticks one letter every LETTER_INTERVAL_S seconds ───────────
+# ── Pico sender — ticks one letter every LETTER_INTERVAL_S ───────────────────
 
 class PicoSender:
-    """
-    Pops one character off the letter queue every LETTER_INTERVAL_S and
-    writes it to the Pico. Runs regardless of mic presence so the backlog
-    keeps draining after the mic unplugs.
-    """
+    """Pops one char every LETTER_INTERVAL_S and writes it to the Pico."""
 
     def __init__(self, letter_queue: LetterQueue, pico: PicoLink):
         self._letters = letter_queue
@@ -409,22 +340,14 @@ class PicoSender:
 
     def _run(self):
         while not self._stop_event.is_set():
-            # Wait up to LETTER_INTERVAL_S for a letter; if none arrives
-            # we simply loop and wait again (no letter to send, no tick).
             ch = self._letters.pop_or_wait(timeout=LETTER_INTERVAL_S)
             if ch is None:
                 continue
-
-            label = "␣" if ch == " " else ch
-            sent  = self._pico.send(ch)
-            status = "OK" if sent else "BUFFERED" if not sent else ""
+            label     = "_" if ch == " " else ch
+            sent      = self._pico.send(ch)
             remaining = len(self._letters)
-            print(f"[Pico] {label}  (sent={sent}, queued={remaining})",
+            print(f"[Pico] '{label}'  (sent={sent}, queued={remaining})",
                   flush=True)
-
-            # Enforce the fingerspelling cadence. If the send failed we
-            # still wait here — the letter was consumed from the queue,
-            # so we don't want to retry-spam a disconnected Pico.
             self._stop_event.wait(LETTER_INTERVAL_S)
 
 
