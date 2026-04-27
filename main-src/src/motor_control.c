@@ -196,8 +196,10 @@ static void pca9685_init_for_servos(void) {
 
 void move_to_letter(char target_letter) {
     if(target_letter == 'J') {
+        move_to_letter_smoothly('J', 50, 50);
     }
     else if(target_letter == 'Z') {
+        move_to_letter_smoothly('Z', 50, 50);
     }
     else{
         for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {

@@ -49,7 +49,7 @@ int main(void)
    }
    else {
       char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
-      // char letters_to_test[] = {'J', 'Z'};
+      // char letters_to_test[] = {'I', 'J', 'K'};
       while(1) {
          init_servo_positions();
          sleep_ms(2000);
