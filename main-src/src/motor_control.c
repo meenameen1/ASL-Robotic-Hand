@@ -193,6 +193,7 @@ static void pca9685_init_for_servos(void) {
     }
 }
 
+static const uint32_t swappedMotorsIndices[MOTOR_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 19, 18, 17, 16};
 
 void move_to_letter(char target_letter) {
     if(target_letter == 'J') {
@@ -203,7 +204,7 @@ void move_to_letter(char target_letter) {
     }
     else{
         for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
-        servo_set_us(servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index]);
+        servo_set_us(servo_index, hand_poses[letter_index(target_letter)].motor_positions[swappedMotorsIndices[servo_index]]);
         }
     }
 }
@@ -245,10 +246,10 @@ void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time
         bool complete = true;
 
         for (int servo_index = 0; servo_index < MOTOR_COUNT; servo_index++) {
-            int target = hand_poses[pose_index].motor_positions[servo_index];
+            int target = hand_poses[pose_index].motor_positions[swappedMotorsIndices[servo_index]];
             target = clamp_us(target);
 
-            int current = current_us_values[servo_index];
+            int current = current_us_values[swappedMotorsIndices[servo_index]];
             current = clamp_us(current);
 
             if (current < target) {
@@ -272,7 +273,7 @@ void move_to_letter_smoothly(char target_letter, int step_size_us, int tick_time
                 complete = false;
             }
 
-            current_us_values[servo_index] = current;
+            current_us_values[swappedMotorsIndices[servo_index]] = current;
             servo_set_us(servo_index, (uint16_t)current);
         }
 
@@ -294,9 +295,9 @@ void init_servo_positions(void) {
     pca9685_write_reg(PCA9685_MODE1, 0x20, PCA9685_I2C_ADDRESS_1); // Need this line for the auto increment. After a read or write the control register is incremented
     pca9685_write_reg(PCA9685_MODE1, 0x20, PCA9685_I2C_ADDRESS_2);
     sleep_ms(10); // Wait for oscillator to stabilize
-    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1); // OUTDRV=1 (totem-pole), important    
+    pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_1); // OUTDRV=1 (totem-pole), important
     pca9685_write_reg(PCA9685_MODE2, 0x04, PCA9685_I2C_ADDRESS_2);
-    
+
     for (int i = 0; i < MOTOR_COUNT; i++) {
         servo_set_us(i, SERVO_MID_US);
         current_us_values[i] = SERVO_MID_US;
