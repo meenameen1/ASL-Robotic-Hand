@@ -17,6 +17,8 @@
 #include "letters.h"
 #include "pico/time.h"
 
+#include "mic.h"
+
 void core1_operation(void);
 
 #define DEFAULT_STEP_SIZE_US 50
@@ -35,7 +37,7 @@ int main(void)
    gpio_set_dir(22, GPIO_OUT);
    gpio_put(22, 0); // Start with power off
 
-
+   
    
 
    bool calibrate_new_motor = false;
