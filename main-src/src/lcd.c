@@ -17,7 +17,7 @@ spi_inst_t *SPI = spi0; // Use SPI0 for the LCD
 
 #define CS_NUM  5
 #define DC_NUM 3
-#define RESET_NUM 4
+#define RESET_NUM 8
 
 #define CS_BIT  (1<<CS_NUM)
 #define RESET_BIT (1<<RESET_NUM)
@@ -66,7 +66,7 @@ void init_spi_lcd() {
     LCD_Clear(0x0000); // Clear the screen to black
 
     init_stretched_font();
-    // LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 32, 0);
     // LCD_DrawString(10, 30, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 50, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 70, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
@@ -862,8 +862,11 @@ const unsigned char asc2_1608[95][16]={
 // Your stretched 32x16 font (Stored in RAM)
 // 95 chars * 32 rows * 2 bytes = 6,080 bytes
 uint8_t asc2_3216[95][64];
+// even bigger characters!!
+uint8_t asc2_6432[95][256];
 
 // Run this once at boot/startup to generate the stretched font from the original 16x8 font.
+/*
 void init_stretched_font(void) {
     for (int char_idx = 0; char_idx < 95; char_idx++) {
 
@@ -892,6 +895,76 @@ void init_stretched_font(void) {
         }
     }
 }
+*/
+void init_stretched_font(void)
+{
+    for (int char_idx = 0; char_idx < 95; char_idx++)
+    {
+        /*
+         * Generate 16x32 font from original 8x16 font.
+         * Each source pixel becomes 2x2 pixels.
+         */
+        for (int src_row = 0; src_row < 16; src_row++)
+        {
+            uint8_t src_byte = asc2_1608[char_idx][src_row];
+            uint16_t stretched_row_32 = 0;
+
+            for (int bit = 0; bit < 8; bit++)
+            {
+                if (src_byte & (1 << bit))
+                {
+                    stretched_row_32 |= (uint16_t)(0x3 << (bit * 2));
+                }
+            }
+
+            int dst_row = src_row * 2;
+
+            asc2_3216[char_idx][dst_row * 2] =
+                stretched_row_32 & 0xFF;
+
+            asc2_3216[char_idx][dst_row * 2 + 1] =
+                (stretched_row_32 >> 8) & 0xFF;
+
+            asc2_3216[char_idx][(dst_row + 1) * 2] =
+                stretched_row_32 & 0xFF;
+
+            asc2_3216[char_idx][(dst_row + 1) * 2 + 1] =
+                (stretched_row_32 >> 8) & 0xFF;
+        }
+
+        /*
+         * Generate 32x64 font from original 8x16 font.
+         * Each source pixel becomes 4x4 pixels.
+         */
+        for (int target_row = 0; target_row < 64; target_row++)
+        {
+            int src_row = target_row / 4;
+            uint8_t src_byte = asc2_1608[char_idx][src_row];
+
+            uint32_t stretched_row_64 = 0;
+
+            for (int bit = 0; bit < 8; bit++)
+            {
+                if (src_byte & (1 << bit))
+                {
+                    stretched_row_64 |= ((uint32_t)0xF << (bit * 4));
+                }
+            }
+
+            asc2_6432[char_idx][target_row * 4] =
+                stretched_row_64 & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 1] =
+                (stretched_row_64 >> 8) & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 2] =
+                (stretched_row_64 >> 16) & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 3] =
+                (stretched_row_64 >> 24) & 0xFF;
+        }
+    }
+}
 
 //===========================================================================
 // Display a single character at position x,y on the screen.
@@ -903,7 +976,8 @@ void init_stretched_font(void) {
 
 void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
 {
-    u16 temp;
+    // u16 temp;
+    uint32_t temp; //changed to 32 bits for that big 64x32 font!!
     u8 pos,t;
     num=num-' ';
     LCD_SetWindow(x,y,x+size/2-1,y+size-1);
@@ -913,6 +987,20 @@ void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
         for(pos=0;pos<size;pos++) {
             if (size==12) temp=asc2_1206[(int)num][pos];
             else if (size==16) temp=asc2_1608[(int)num][pos];
+            else if (size == 32) //// addded for the 32x16 font
+            {
+                temp =
+                    ((uint32_t)asc2_3216[(int)num][pos * 2]) |
+                    ((uint32_t)asc2_3216[(int)num][pos * 2 + 1] << 8);
+            }
+            else if (size == 64) /// added for the 64x32 font
+            {
+                temp =
+                    ((uint32_t)asc2_6432[(int)num][pos * 4]) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 1] << 8) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 2] << 16) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 3] << 24);
+            }
             else {
                 // Combine the two 8-bit halves into a 16-bit row
                 temp = asc2_3216[(int)num][pos * 2] | (asc2_3216[(int)num][pos * 2 + 1] << 8);

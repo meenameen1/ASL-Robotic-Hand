@@ -4,7 +4,7 @@ int letter_index(char c) {
     if (c == POSE_J1 || c == POSE_J2 || c == POSE_J3 || c == POSE_J4 || c == POSE_Z1 || c == POSE_Z2 || c == POSE_Z3 || c == POSE_Z4){
         return c;
     }
-   
+    
     // if (c < 'A') return -1;
     // if (c > 'Z') return -1;
     return c - 'A';

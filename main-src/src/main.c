@@ -19,6 +19,9 @@
 
 void core1_operation(void);
 
+#define DEFAULT_STEP_SIZE_US 50
+#define DEFAULT_TICK_TIME_MS 50
+
 int main(void)
 {
 
@@ -32,6 +35,8 @@ int main(void)
    gpio_set_dir(22, GPIO_OUT);
    gpio_put(22, 0); // Start with power off
 
+
+   
 
    bool calibrate_new_motor = false;
    int init_port = 21;
@@ -55,17 +60,19 @@ int main(void)
          sleep_ms(2000);
          for (int i = 0; i < sizeof(letters_to_test); i++) {
             // move_to_letter(letters_to_test[i]);
-            move_to_letter_smoothly(letters_to_test[i], 50, 50);
+            move_to_letter_smoothly(letters_to_test[i], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+            u16 x = 200;
+            u16 y = 200;
+            u16 fc = 0xFFFF; // White color
+            u16 bc = 0x0000; // Black color
+            // u16 bc = letters_to_test[i];
+            char num = letters_to_test[i];
+            u8 size = 64; // Size of the character
+            u8 mode = 0; // Normal mode
+            LCD_DrawChar(x, y, fc, bc, num, size, mode);
             sleep_ms(2000);
          }
       }
-      // while(1) {
-         // init_servo_positions();
-         // sleep_ms(2000);
-         // move_to_letter('A');
-         // sleep_ms(2000);
-
-      // }
    } 
 }
 // This function will run on the second core and handle all USB, LCD, OLED, and UI logic
