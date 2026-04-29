@@ -87,6 +87,11 @@ void usb_task(void)
    tuh_task();
 }
 
+void usb_reinit (void)
+{
+    tusb_init();
+}
+
 void usb_init(Keyboard_Device_t *keyboard)
 {
     kbd = keyboard;
@@ -101,32 +106,35 @@ void setUsbPowerOutput(bool power_on)
     gpio_put(USB_POWERSWITCH_EN_GPIO, power_on ? 1 : 0);
 }
 
-void USB320_ID_GPIO_callback(uint gpio, uint32_t events)
+void gpio_callbacks(uint gpio, uint32_t events)
 {
-    //Device Attached
-    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
-        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL);
-        kbd->device_attached = ID_DEVICE_ATTACHED;
-        setUsbPowerOutput(true);
+
+    if(gpio == USB320_ID_GPIO)
+    {
+        //Device Attached
+        if(events & (GPIO_IRQ_EDGE_FALL)) {
+            gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL);
+            kbd->device_attached = ID_DEVICE_ATTACHED;
+            setUsbPowerOutput(true);
+        }
+        //Host/ Nothing Attached
+        else if(gpio_get_irq_event_mask(USB320_ID_GPIO) & GPIO_IRQ_EDGE_RISE) {
+            gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_RISE);
+            // Host or nothing attached
+            kbd->device_attached = ID_HOST_ATTACHED;
+            setUsbPowerOutput(false);
+        }
     }
-    //Host/ Nothing Attached
-    else if(gpio_get_irq_event_mask(USB320_ID_GPIO) & GPIO_IRQ_EDGE_RISE) {
-        gpio_acknowledge_irq(USB320_ID_GPIO, GPIO_IRQ_EDGE_RISE);
-        // Host or nothing attached
-        kbd->device_attached = ID_HOST_ATTACHED;
-         setUsbPowerOutput(false);
+
+    else if(gpio == USB_POWERSWITCH_FLG_GPIO)
+    {
+        //Power Switch Flag triggered (overcurrent or overtemp)
+        if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
+            gpio_acknowledge_irq(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL);
+            setUsbPowerOutput(false); // Cut power to the USB device
+        }
     }
 }
-
-void AP2171_FLG_GPIO_callback(uint gpio, uint32_t events)
-{
-    //Power Switch Flag triggered (overcurrent or overtemp)
-    if(events & (1<<GPIO_IRQ_EDGE_FALL)) {
-        gpio_acknowledge_irq(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL);
-        setUsbPowerOutput(false); // Cut power to the USB device
-    }
-}
-
 void usb_initPeripherals(Keyboard_Device_t *kbd)
 {
     // Initialize GPIOs for USB power control and detection
@@ -134,7 +142,6 @@ void usb_initPeripherals(Keyboard_Device_t *kbd)
     gpio_set_dir(USB320_ID_GPIO, GPIO_IN);
     gpio_pull_up(USB320_ID_GPIO);
     //Setup interrupt for USB ID pin to detect when a device/host is attached or detached
-    gpio_set_irq_enabled_with_callback(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, USB320_ID_GPIO_callback);
 
     gpio_init(USB_POWERSWITCH_EN_GPIO);
     gpio_set_dir(USB_POWERSWITCH_EN_GPIO, GPIO_OUT);
@@ -143,8 +150,15 @@ void usb_initPeripherals(Keyboard_Device_t *kbd)
     gpio_init(USB_POWERSWITCH_FLG_GPIO);
     gpio_set_dir(USB_POWERSWITCH_FLG_GPIO, GPIO_IN);
     gpio_pull_up(USB_POWERSWITCH_FLG_GPIO);
-    gpio_set_irq_enabled_with_callback(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL, true, AP2171_FLG_GPIO_callback);
 
+    if (gpio_get(USB320_ID_GPIO) == 0)
+    {
+        kbd->device_attached = ID_DEVICE_ATTACHED;
+        setUsbPowerOutput(true);
+    }
+
+    gpio_set_irq_enabled_with_callback(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, gpio_callbacks);
+    gpio_set_irq_enabled(USB_POWERSWITCH_FLG_GPIO, GPIO_IRQ_EDGE_FALL, true);
 
 }
 
@@ -154,25 +168,30 @@ void usb_initPeripherals(Keyboard_Device_t *kbd)
 
 // 1. Invoked when a device is plugged in
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
-    kbd->connected = true;
-    tuh_hid_receive_report(dev_addr, instance);
+    if (tuh_hid_interface_protocol(dev_addr, instance) == HID_ITF_PROTOCOL_KEYBOARD)
+    {
+        kbd->connected = true;
+        tuh_hid_receive_report(dev_addr, instance);
+    }
 }
 
 // 2. Invoked when a device is unplugged
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
-    kbd->connected = false;
-    printf("\n[Keyboard Disconnected]\n");
+    if (tuh_hid_interface_protocol(dev_addr, instance) == HID_ITF_PROTOCOL_KEYBOARD)
+    {
+        kbd->connected = false;
+        printf("\n[Keyboard Disconnected]\n");
+    }
 }
 
 // 3. Invoked when the keyboard sends data
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
-
-    // Cast the raw byte array into the TinyUSB keyboard struct
-    hid_keyboard_report_t const *kbd_report = (hid_keyboard_report_t const *) report;
-
-    // Process the keystrokes
-    process_kbd_report(kbd_report);
-
+    if (tuh_hid_interface_protocol(dev_addr, instance) == HID_ITF_PROTOCOL_KEYBOARD) {
+        // Cast the raw byte array into the TinyUSB keyboard struct
+        hid_keyboard_report_t const *kbd_report = (hid_keyboard_report_t const *) report;
+        // Process the keystrokes
+        process_kbd_report(kbd_report);
+    }
     // Ask the keyboard for the next report
     tuh_hid_receive_report(dev_addr, instance);
 }

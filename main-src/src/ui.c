@@ -1,10 +1,12 @@
 #include "ui.h"
 #include "oled.h"
 #include "hardware/timer.h"
+// #include "pico/multicore.h"
 #include <stdint.h>
 
 void handle_key_press(UI_Context_t* ui, char key);
 
+static int translate_counter = 0;
 
 void ui_state_machine(UI_Context_t* ui)
 {
@@ -31,14 +33,38 @@ void ui_state_machine(UI_Context_t* ui)
          char currentKey = ui->keyboard->last_key;
 
          handle_key_press(ui, currentKey);
-         // After processing, go back to idle
          ui->keyboard->key_ready = false; // Reset the key ready flag
-         ui->state = STATE_IDLE;
+
+         if(currentKey == ENTER) {
+            display_screen(ui->oled, OLED_MODE_TRANSLATING);
+            ui->state = STATE_TRANSLATING;
+         }
+         else
+         {
+            // After processing, go back to idle
+            ui->state = STATE_IDLE;
+         }
          break;
 
       case STATE_TRANSLATING:
          // Handle translation logic
-         // ...
+         if (ui->keyboard->key_ready && ui->keyboard->last_key == '\b')
+         {
+            ui->state = STATE_IDLE;
+            break;
+         }
+
+         if(translate_counter > ui->lcd->len)
+         {
+            ui->state = STATE_IDLE;
+            translate_counter = 0;
+         }
+         // else if(multicore_fifo_wready())
+         // {
+         //    multicore_fifo_push_blocking(ui->lcd->display_buffer[translate_counter++]);
+         // }
+
+
          break;
 
       case STATE_KEYBOARD_DISCONNECTED:
@@ -50,7 +76,7 @@ void ui_state_machine(UI_Context_t* ui)
          }
          else
          {
-            usb_init(ui->keyboard); // Attempt to reinitialize USB connection
+            usb_reinit(); // Attempt to reinitialize USB connection
          }
          break;
 

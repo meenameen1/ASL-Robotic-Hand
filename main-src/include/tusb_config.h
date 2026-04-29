@@ -21,12 +21,15 @@
 
 // -- Host Class Driver Configuration --
 #define CFG_TUH_HUB                 1
-#define CFG_TUH_HID                 1
+#define CFG_TUH_HID                 4
 #define CFG_TUH_HID_EPIN_BUFSIZE    64
 
-// Enable Hub Support
-#define CFG_TUH_HUB 1
-#define CFG_TUH_DEVICE_MAX 2
+// // Enable Hub Support
+// #define CFG_TUH_HUB 1
+// #define CFG_TUH_DEVICE_MAX 3
+// #define CFG_TUH_ENUMERATION_BUFSIZE 512
+
+// #define CFG_TUSB_DEBUG 2
 
 #ifdef __cplusplus
  }

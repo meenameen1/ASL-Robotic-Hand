@@ -23,7 +23,7 @@ int main(void)
 {
 
    stdio_init_all();
-   sleep_ms(500);
+   sleep_ms(2000);
 
    //Running UI stuff on core 1
    multicore_launch_core1(core1_operation);
@@ -50,22 +50,21 @@ int main(void)
    else {
       char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
       // char letters_to_test[] = {'P', 'Q'};
+      char letter_received = 'A';
       while(1) {
-         init_servo_positions();
-         sleep_ms(2000);
-         for (int i = 0; i < sizeof(letters_to_test); i++) {
-            move_to_letter(letters_to_test[i]);
-            sleep_ms(2000);
-         }
-      }
-      // while(1) {
          // init_servo_positions();
          // sleep_ms(2000);
-         // move_to_letter('A');
-         // sleep_ms(2000);
+         // for (int i = 0; i < sizeof(letters_to_test); i++) {
+         //    move_to_letter(letters_to_test[i]);
+         //    sleep_ms(2000);
+         // }
+         // // letter_received = multicore_fifo_pop_blocking();
+         // // move_to_letter_smoothly(letter_received, 50, 50);
+         sleep_ms(2000);
 
-      // }
-   } 
+      }
+
+   }
 }
 // This function will run on the second core and handle all USB, LCD, OLED, and UI logic
 void core1_operation(void)
@@ -100,9 +99,11 @@ void core1_operation(void)
 
    usb_initPeripherals(&keyboard);
    setUsbPowerOutput(1);
+
    while(1)
    {
-      usb_task();
-      ui_state_machine(&ui_context);
+
+      // usb_task();
+      // ui_state_machine(&ui_context);
    }
 }

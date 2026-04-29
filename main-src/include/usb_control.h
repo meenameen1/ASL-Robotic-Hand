@@ -27,6 +27,7 @@ void usb_initPeripherals(Keyboard_Device_t *kbd);
 void usb_init(Keyboard_Device_t *kbd);
 void setUsbPowerOutput(bool on);
 void getDeviceAttached();
+void usb_reinit (void);
 
 
 
