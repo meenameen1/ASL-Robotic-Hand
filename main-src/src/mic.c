@@ -66,7 +66,6 @@ void init_uart(void)
     gpio_set_function(pin_TX, GPIO_FUNC_UART);
     gpio_set_function(pin_RX, GPIO_FUNC_UART);
 
-    // This must match the Raspberry Pi side.
     uart_init(UART_ID, 56000);
 
     uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
@@ -78,17 +77,12 @@ void mic_uart_poll(void)
     while (uart_is_readable(UART_ID)) {
         uint8_t c = uart_getc(UART_ID);
 
-        // Accept only uppercase A-Z
-        if (c >= 'A' && c <= 'Z') {
+        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#') {
             push_letter((char)c);
         }
-
-        // Optional: convert lowercase to uppercase
-        else if (c >= 'a' && c <= 'z') {
-            push_letter((char)(c - 32));
-        }
-
-        // Ignore newline, carriage return, spaces, etc.
+        // else if (c >= 'a' && c <= 'z') {
+            // push_letter((char)(c - 32));
+        // }
     }
 }
 

@@ -1091,11 +1091,106 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic)
 }
 
 
-void draw_sentence_with_highlight(
-    const char *sentence,
-    int len,
-    int current_index
-) {
+
+#define LCD_BLACK 0x0000
+#define LCD_WHITE 0xFFFF
+
+#define SENTENCE_X1 0
+#define SENTENCE_Y1 0
+#define SENTENCE_X2 480
+#define SENTENCE_Y2 80
+
+#define BIG_LETTER_X1 0
+#define BIG_LETTER_Y1 170
+#define BIG_LETTER_X2 480
+#define BIG_LETTER_Y2 320
+
+void draw_sentence_top(const char *sentence, int len, int current_index)
+{
+    u16 start_x = 10;
+    u16 start_y = 10;
+    u16 x = start_x;
+    u16 y = start_y;
+
+    u8 size = 32;
+
+    // Clear only the top sentence area
+    LCD_DrawFillRectangle(
+        SENTENCE_X1,
+        SENTENCE_Y1,
+        SENTENCE_X2,
+        SENTENCE_Y2,
+        LCD_BLACK
+    );
+
+    for (int i = 0; i < len; i++) {
+        char c = sentence[i];
+
+        if (c == ' ') {
+            x += 24;
+        } else {
+            if (i == current_index) {
+                // Highlight current letter in sentence
+                LCD_DrawChar(x, y, LCD_BLACK, LCD_WHITE, c, size, 0);
+            } else {
+                LCD_DrawChar(x, y, LCD_WHITE, LCD_BLACK, c, size, 0);
+            }
+
+            x += 36;
+        }
+
+        if (x > 440) {
+            x = start_x;
+            y += 38;
+
+            // Stop drawing if we run out of top area
+            if (y + size > SENTENCE_Y2) {
+                break;
+            }
+        }
+    }
+}
+
+void draw_big_current_letter(char current_letter)
+{
+    u8 big_size = 64;
+
+    // Clear only the bottom big-letter area
+    LCD_DrawFillRectangle(
+        BIG_LETTER_X1,
+        BIG_LETTER_Y1,
+        BIG_LETTER_X2,
+        BIG_LETTER_Y2,
+        LCD_BLACK
+    );
+
+    // Center-ish position; adjust for your LCD/font
+    u16 x = 200;
+    u16 y = 190;
+
+    LCD_DrawChar(x, y, LCD_WHITE, LCD_BLACK, current_letter, big_size, 0);
+}
+
+void draw_sentence_screen(const char *sentence, int len, int current_index)
+{
+    draw_sentence_top(sentence, len, current_index);
+
+    if (current_index >= 0 && current_index < len) {
+        draw_big_current_letter(sentence[current_index]);
+    } else {
+        LCD_DrawFillRectangle(
+            BIG_LETTER_X1,
+            BIG_LETTER_Y1,
+            BIG_LETTER_X2,
+            BIG_LETTER_Y2,
+            LCD_BLACK
+        );
+    }
+}
+
+
+
+void draw_sentence_with_highlight(const char *sentence, int len, int current_index) {
     u16 start_x = 50;
     u16 start_y = 100;
     u16 x = start_x;
@@ -1123,7 +1218,8 @@ void draw_sentence_with_highlight(
         if (i == current_index) {
             LCD_DrawChar(x, y, highlight_fc, highlight_bc, sentence[i], highlight_size, 0);
             x += 70;
-        } else {
+        }
+        else {
             LCD_DrawChar(x, y, normal_fc, normal_bc, sentence[i], normal_size, 0);
             x += 38;
         }

@@ -102,5 +102,13 @@ void init_spi_lcd(void);
 void LCD_write_letter(LCD_t* lcd, char letter);
 void init_stretched_font(void);
 
-void draw_sentence_with_highlight(const char *sentence, int len, int current_index);
+// void draw_sentence_with_highlight(const char *sentence, int len, int current_index);
+// void draw_sentence_top(const char *sentence, int len, int current_index);
+// void draw_current_letter(char letter);
+
+void draw_sentence_top(const char *sentence, int len, int current_index);
+void draw_big_current_letter(char current_letter);
+void draw_sentence_screen(const char *sentence, int len, int current_index);
+
+
 #endif

@@ -48,8 +48,6 @@ int main(void)
    int sentence_len = 0;
    int current_index = 0;
 
-   bool screen_dirty = true;
-
 
    // char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
    while(1) {
@@ -60,29 +58,14 @@ int main(void)
          if (sentence_len < MAX_SENTENCE_LEN - 1) {
             sentence[sentence_len++] = letter;
             sentence[sentence_len] = '\0';
-            screen_dirty = true;
          }
       }
-      // Redraw if new text came in or current letter changed
-      if (screen_dirty) {
-         draw_sentence_with_highlight(sentence, sentence_len, current_index);
-         screen_dirty = false;
-      }
-      // Sign the next available letter
       if (current_index < sentence_len) {
-         char current_letter = sentence[current_index];
-
-         // Show which letter is about to be signed
-         draw_sentence_with_highlight(sentence, sentence_len, current_index);
-
-         // Move the hand
-         move_to_letter_smoothly(current_letter, DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
-
-         // Move to the next letter
+         draw_sentence_screen(sentence, sentence_len, current_index);
+         move_to_letter_smoothly(sentence[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
          current_index++;
-         screen_dirty = true;
-      }
-      tight_loop_contents();
+    }
+    tight_loop_contents();
    } 
 }
 
