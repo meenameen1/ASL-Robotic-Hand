@@ -1,9 +1,11 @@
 #ifndef MIC_H
 #define MIC_H
 
-#include <stdint.h>
+#include <stdbool.h>
 
-#define MOTOR_COUNT 24
-
+void init_uart(void);
+void mic_uart_poll(void);
+bool mic_pop_letter(char *letter);
+bool mic_has_letters(void);
 
 #endif

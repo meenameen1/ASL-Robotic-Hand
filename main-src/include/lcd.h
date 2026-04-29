@@ -101,4 +101,6 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic);
 void init_spi_lcd(void);
 void LCD_write_letter(LCD_t* lcd, char letter);
 void init_stretched_font(void);
+
+void draw_sentence_with_highlight(const char *sentence, int len, int current_index);
 #endif

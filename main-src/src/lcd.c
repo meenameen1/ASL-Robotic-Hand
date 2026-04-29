@@ -1089,3 +1089,48 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic)
     LCD_WriteData16_End();
     lcddev.select(0);
 }
+
+
+void draw_sentence_with_highlight(
+    const char *sentence,
+    int len,
+    int current_index
+) {
+    u16 start_x = 50;
+    u16 start_y = 100;
+    u16 x = start_x;
+    u16 y = start_y;
+
+    u8 normal_size = 32;
+    u8 highlight_size = 64;
+
+    u16 normal_fc = 0xFFFF;
+    u16 normal_bc = 0x0000;
+
+    u16 highlight_fc = 0x0000;
+    u16 highlight_bc = 0xFFFF;
+
+    // Clear the full text area before redrawing
+    // LCD_Fill(0, 80, 480, 320, 0x0000);
+    LCD_Clear(0x0000);
+
+    for (int i = 0; i < len; i++) {
+        if (sentence[i] == ' ') {
+            x += 30;
+            continue;
+        }
+
+        if (i == current_index) {
+            LCD_DrawChar(x, y, highlight_fc, highlight_bc, sentence[i], highlight_size, 0);
+            x += 70;
+        } else {
+            LCD_DrawChar(x, y, normal_fc, normal_bc, sentence[i], normal_size, 0);
+            x += 38;
+        }
+
+        if (x > 420) {
+            x = start_x;
+            y += 70;
+        }
+    }
+}
