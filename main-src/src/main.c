@@ -31,6 +31,9 @@ int main(void)
    gpio_init(22);
    gpio_set_dir(22, GPIO_OUT);
    gpio_put(22, 0); // Start with power off
+   gpio_init(40);
+   gpio_set_dir(40, GPIO_OUT);
+   gpio_put(40, 1); // Start with power off
 
 
    bool calibrate_new_motor = false;
@@ -98,7 +101,7 @@ void core1_operation(void)
    };
 
    usb_initPeripherals(&keyboard);
-   setUsbPowerOutput(1);
+   // setUsbPowerOutput(1);
 
    while(1)
    {

@@ -154,7 +154,7 @@ void usb_initPeripherals(Keyboard_Device_t *kbd)
     if (gpio_get(USB320_ID_GPIO) == 0)
     {
         kbd->device_attached = ID_DEVICE_ATTACHED;
-        setUsbPowerOutput(true);
+        // setUsbPowerOutput(true);
     }
 
     gpio_set_irq_enabled_with_callback(USB320_ID_GPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, gpio_callbacks);
