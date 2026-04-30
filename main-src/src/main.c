@@ -66,7 +66,7 @@ int main(void)
          current_index++;
     }
     tight_loop_contents();
-   } 
+   }
 }
 
 
@@ -102,10 +102,10 @@ void core1_operation(void)
    };
 
    usb_initPeripherals(&keyboard);
-   setUsbPowerOutput(1);
+   setUsbPowerOutput(0);
    while(1)
    {
-      usb_task();
-      ui_state_machine(&ui_context);
+      // usb_task();
+      // ui_state_machine(&ui_context);
    }
 }
