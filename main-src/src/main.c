@@ -17,7 +17,14 @@
 #include "letters.h"
 #include "pico/time.h"
 
+#include "mic.h"
+
 void core1_operation(void);
+
+#define DEFAULT_STEP_SIZE_US 50
+#define DEFAULT_TICK_TIME_MS 50
+
+#define MAX_SENTENCE_LEN 128
 
 int main(void)
 {
@@ -32,42 +39,37 @@ int main(void)
    gpio_set_dir(22, GPIO_OUT);
    gpio_put(22, 0); // Start with power off
 
+   init_servo_positions();
+   // blocking_read_uart();
 
-   bool calibrate_new_motor = false;
-   int init_port = 21;
-   // char letters[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
-   if(calibrate_new_motor) {
-      // init_servo_positions();
-      while(1) {
-         secondpwmtest(init_port, 800);
-         sleep_ms(2000);
-         secondpwmtest(init_port, 2300);
-         sleep_ms(2000);
-         secondpwmtest(init_port, 1600);
-         sleep_ms(8000);
-      }
-   }
-   else {
-      char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
-      // char letters_to_test[] = {'J', 'Z'};
-      while(1) {
-         init_servo_positions();
-         sleep_ms(2000);
-         for (int i = 0; i < sizeof(letters_to_test); i++) {
-            // move_to_letter(letters_to_test[i]);
-            move_to_letter_smoothly(letters_to_test[i], 50, 50);
-            sleep_ms(2000);
+   init_uart();
+
+   char sentence[MAX_SENTENCE_LEN];
+   int sentence_len = 0;
+   int current_index = 0;
+
+
+   // char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
+   while(1) {
+      mic_uart_poll();
+      char letter;
+      // Pull all new UART letters into the sentence buffer
+      while (mic_pop_letter(&letter)) {
+         if (sentence_len < MAX_SENTENCE_LEN - 1) {
+            sentence[sentence_len++] = letter;
+            sentence[sentence_len] = '\0';
          }
       }
-      // while(1) {
-         // init_servo_positions();
-         // sleep_ms(2000);
-         // move_to_letter('A');
-         // sleep_ms(2000);
-
-      // }
+      if (current_index < sentence_len) {
+         draw_sentence_screen(sentence, sentence_len, current_index);
+         move_to_letter_smoothly(sentence[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+         current_index++;
+    }
+    tight_loop_contents();
    } 
 }
+
+
 // This function will run on the second core and handle all USB, LCD, OLED, and UI logic
 void core1_operation(void)
 {

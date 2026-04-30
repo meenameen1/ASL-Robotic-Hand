@@ -17,7 +17,7 @@ spi_inst_t *SPI = spi0; // Use SPI0 for the LCD
 
 #define CS_NUM  5
 #define DC_NUM 3
-#define RESET_NUM 4
+#define RESET_NUM 8
 
 #define CS_BIT  (1<<CS_NUM)
 #define RESET_BIT (1<<RESET_NUM)
@@ -66,7 +66,7 @@ void init_spi_lcd() {
     LCD_Clear(0x0000); // Clear the screen to black
 
     init_stretched_font();
-    // LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
+    LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 32, 0);
     // LCD_DrawString(10, 30, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 50, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 70, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
@@ -862,8 +862,11 @@ const unsigned char asc2_1608[95][16]={
 // Your stretched 32x16 font (Stored in RAM)
 // 95 chars * 32 rows * 2 bytes = 6,080 bytes
 uint8_t asc2_3216[95][64];
+// even bigger characters!!
+uint8_t asc2_6432[95][256];
 
 // Run this once at boot/startup to generate the stretched font from the original 16x8 font.
+/*
 void init_stretched_font(void) {
     for (int char_idx = 0; char_idx < 95; char_idx++) {
 
@@ -892,6 +895,76 @@ void init_stretched_font(void) {
         }
     }
 }
+*/
+void init_stretched_font(void)
+{
+    for (int char_idx = 0; char_idx < 95; char_idx++)
+    {
+        /*
+         * Generate 16x32 font from original 8x16 font.
+         * Each source pixel becomes 2x2 pixels.
+         */
+        for (int src_row = 0; src_row < 16; src_row++)
+        {
+            uint8_t src_byte = asc2_1608[char_idx][src_row];
+            uint16_t stretched_row_32 = 0;
+
+            for (int bit = 0; bit < 8; bit++)
+            {
+                if (src_byte & (1 << bit))
+                {
+                    stretched_row_32 |= (uint16_t)(0x3 << (bit * 2));
+                }
+            }
+
+            int dst_row = src_row * 2;
+
+            asc2_3216[char_idx][dst_row * 2] =
+                stretched_row_32 & 0xFF;
+
+            asc2_3216[char_idx][dst_row * 2 + 1] =
+                (stretched_row_32 >> 8) & 0xFF;
+
+            asc2_3216[char_idx][(dst_row + 1) * 2] =
+                stretched_row_32 & 0xFF;
+
+            asc2_3216[char_idx][(dst_row + 1) * 2 + 1] =
+                (stretched_row_32 >> 8) & 0xFF;
+        }
+
+        /*
+         * Generate 32x64 font from original 8x16 font.
+         * Each source pixel becomes 4x4 pixels.
+         */
+        for (int target_row = 0; target_row < 64; target_row++)
+        {
+            int src_row = target_row / 4;
+            uint8_t src_byte = asc2_1608[char_idx][src_row];
+
+            uint32_t stretched_row_64 = 0;
+
+            for (int bit = 0; bit < 8; bit++)
+            {
+                if (src_byte & (1 << bit))
+                {
+                    stretched_row_64 |= ((uint32_t)0xF << (bit * 4));
+                }
+            }
+
+            asc2_6432[char_idx][target_row * 4] =
+                stretched_row_64 & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 1] =
+                (stretched_row_64 >> 8) & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 2] =
+                (stretched_row_64 >> 16) & 0xFF;
+
+            asc2_6432[char_idx][target_row * 4 + 3] =
+                (stretched_row_64 >> 24) & 0xFF;
+        }
+    }
+}
 
 //===========================================================================
 // Display a single character at position x,y on the screen.
@@ -903,7 +976,8 @@ void init_stretched_font(void) {
 
 void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
 {
-    u16 temp;
+    // u16 temp;
+    uint32_t temp; //changed to 32 bits for that big 64x32 font!!
     u8 pos,t;
     num=num-' ';
     LCD_SetWindow(x,y,x+size/2-1,y+size-1);
@@ -913,6 +987,20 @@ void _LCD_DrawChar(u16 x,u16 y,u16 fc, u16 bc, char num, u8 size, u8 mode)
         for(pos=0;pos<size;pos++) {
             if (size==12) temp=asc2_1206[(int)num][pos];
             else if (size==16) temp=asc2_1608[(int)num][pos];
+            else if (size == 32) //// addded for the 32x16 font
+            {
+                temp =
+                    ((uint32_t)asc2_3216[(int)num][pos * 2]) |
+                    ((uint32_t)asc2_3216[(int)num][pos * 2 + 1] << 8);
+            }
+            else if (size == 64) /// added for the 64x32 font
+            {
+                temp =
+                    ((uint32_t)asc2_6432[(int)num][pos * 4]) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 1] << 8) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 2] << 16) |
+                    ((uint32_t)asc2_6432[(int)num][pos * 4 + 3] << 24);
+            }
             else {
                 // Combine the two 8-bit halves into a 16-bit row
                 temp = asc2_3216[(int)num][pos * 2] | (asc2_3216[(int)num][pos * 2 + 1] << 8);
@@ -1000,4 +1088,145 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic)
 
     LCD_WriteData16_End();
     lcddev.select(0);
+}
+
+
+
+#define LCD_BLACK 0x0000
+#define LCD_WHITE 0xFFFF
+
+#define SENTENCE_X1 0
+#define SENTENCE_Y1 0
+#define SENTENCE_X2 480
+#define SENTENCE_Y2 80
+
+#define BIG_LETTER_X1 0
+#define BIG_LETTER_Y1 170
+#define BIG_LETTER_X2 480
+#define BIG_LETTER_Y2 320
+
+void draw_sentence_top(const char *sentence, int len, int current_index)
+{
+    u16 start_x = 10;
+    u16 start_y = 10;
+    u16 x = start_x;
+    u16 y = start_y;
+
+    u8 size = 32;
+
+    // Clear only the top sentence area
+    LCD_DrawFillRectangle(
+        SENTENCE_X1,
+        SENTENCE_Y1,
+        SENTENCE_X2,
+        SENTENCE_Y2,
+        LCD_BLACK
+    );
+
+    for (int i = 0; i < len; i++) {
+        char c = sentence[i];
+
+        if (c == ' ') {
+            x += 24;
+        } else {
+            if (i == current_index) {
+                // Highlight current letter in sentence
+                LCD_DrawChar(x, y, LCD_BLACK, LCD_WHITE, c, size, 0);
+            } else {
+                LCD_DrawChar(x, y, LCD_WHITE, LCD_BLACK, c, size, 0);
+            }
+
+            x += 36;
+        }
+
+        if (x > 440) {
+            x = start_x;
+            y += 38;
+
+            // Stop drawing if we run out of top area
+            if (y + size > SENTENCE_Y2) {
+                break;
+            }
+        }
+    }
+}
+
+void draw_big_current_letter(char current_letter)
+{
+    u8 big_size = 64;
+
+    // Clear only the bottom big-letter area
+    LCD_DrawFillRectangle(
+        BIG_LETTER_X1,
+        BIG_LETTER_Y1,
+        BIG_LETTER_X2,
+        BIG_LETTER_Y2,
+        LCD_BLACK
+    );
+
+    // Center-ish position; adjust for your LCD/font
+    u16 x = 200;
+    u16 y = 190;
+
+    LCD_DrawChar(x, y, LCD_WHITE, LCD_BLACK, current_letter, big_size, 0);
+}
+
+void draw_sentence_screen(const char *sentence, int len, int current_index)
+{
+    draw_sentence_top(sentence, len, current_index);
+
+    if (current_index >= 0 && current_index < len) {
+        draw_big_current_letter(sentence[current_index]);
+    } else {
+        LCD_DrawFillRectangle(
+            BIG_LETTER_X1,
+            BIG_LETTER_Y1,
+            BIG_LETTER_X2,
+            BIG_LETTER_Y2,
+            LCD_BLACK
+        );
+    }
+}
+
+
+
+void draw_sentence_with_highlight(const char *sentence, int len, int current_index) {
+    u16 start_x = 50;
+    u16 start_y = 100;
+    u16 x = start_x;
+    u16 y = start_y;
+
+    u8 normal_size = 32;
+    u8 highlight_size = 64;
+
+    u16 normal_fc = 0xFFFF;
+    u16 normal_bc = 0x0000;
+
+    u16 highlight_fc = 0x0000;
+    u16 highlight_bc = 0xFFFF;
+
+    // Clear the full text area before redrawing
+    // LCD_Fill(0, 80, 480, 320, 0x0000);
+    LCD_Clear(0x0000);
+
+    for (int i = 0; i < len; i++) {
+        if (sentence[i] == ' ') {
+            x += 30;
+            continue;
+        }
+
+        if (i == current_index) {
+            LCD_DrawChar(x, y, highlight_fc, highlight_bc, sentence[i], highlight_size, 0);
+            x += 70;
+        }
+        else {
+            LCD_DrawChar(x, y, normal_fc, normal_bc, sentence[i], normal_size, 0);
+            x += 38;
+        }
+
+        if (x > 420) {
+            x = start_x;
+            y += 70;
+        }
+    }
 }

@@ -48,8 +48,8 @@ extern lcd_dev_t lcddev;
 #define USE_HORIZONTAL       1
 
 // The dimensions of the display.
-#define LCD_W 240
-#define LCD_H 320
+#define LCD_W 320
+#define LCD_H 480
 
 // Some popular colors
 #define WHITE       0xFFFF
@@ -101,4 +101,14 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic);
 void init_spi_lcd(void);
 void LCD_write_letter(LCD_t* lcd, char letter);
 void init_stretched_font(void);
+
+// void draw_sentence_with_highlight(const char *sentence, int len, int current_index);
+// void draw_sentence_top(const char *sentence, int len, int current_index);
+// void draw_current_letter(char letter);
+
+void draw_sentence_top(const char *sentence, int len, int current_index);
+void draw_big_current_letter(char current_letter);
+void draw_sentence_screen(const char *sentence, int len, int current_index);
+
+
 #endif
