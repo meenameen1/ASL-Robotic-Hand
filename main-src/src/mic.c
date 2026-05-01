@@ -77,7 +77,7 @@ void mic_uart_poll(void)
     while (uart_is_readable(UART_ID)) {
         uint8_t c = uart_getc(UART_ID);
 
-        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#') {
+        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#'  || c == '\b' || c == '\r') {
             push_letter((char)c);
         }
         // else if (c >= 'a' && c <= 'z') {
@@ -119,7 +119,7 @@ void blocking_read_uart()
         if (c < 65 || c > 90) {
             continue;
         }
-        
+
         LCD_DrawChar(x, y, fc, bc, (char)c, size, mode);
         move_to_letter_smoothly((char)c, 50, 50);
         x = x + 60;

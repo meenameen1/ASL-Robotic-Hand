@@ -66,7 +66,7 @@ void init_spi_lcd() {
     LCD_Clear(0x0000); // Clear the screen to black
 
     init_stretched_font();
-    LCD_DrawString(10, 10, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 32, 0);
+    LCD_DrawString(10, 10, 0x0000, 0xFFFF, " ASL Robotic Hand Translator ", 32, 0);
     // LCD_DrawString(10, 30, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 50, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
     // LCD_DrawString(10, 70, 0xFFFF, 0x0000, "ASL Robotic Hand Translator", 16, 0);
@@ -83,8 +83,8 @@ void LCD_write_letter(LCD_t* lcd, char letter)
     u8 size = 32; // Character size
     u8 mode = 0; // Non-transparent background
 
-    u16 x = (size/2)*((lcd->len-1) % 20); // X position
-    u16 y = size * ((lcd->len-1) / 20); // Y position
+    u16 x = (size/2)*((lcd->len-1) % 30); // X position
+    u16 y = 45 + size * ((lcd->len-1) / 30); // Y position
 
     LCD_DrawChar(x, y, fc, bc, letter, size, mode);
 }
@@ -1104,6 +1104,16 @@ void LCD_DrawPicture(u16 x0, u16 y0, const Picture *pic)
 #define BIG_LETTER_Y1 170
 #define BIG_LETTER_X2 480
 #define BIG_LETTER_Y2 320
+
+void draw_highlighted_letter(LCD_t *lcd, int letter_index) {
+    u8 size = 32; // Character size
+    u8 mode = 0; // Non-transparent background
+    u16 x = (size/2)*((letter_index) % 30); // X position
+    u16 y = 45 + size * ((letter_index) / 30); // Y position
+    LCD_DrawChar(x, y, 0x0000, 0xFFFF, lcd->display_buffer[letter_index], size, mode);
+    draw_big_current_letter(lcd->display_buffer[letter_index]);
+}
+
 
 void draw_sentence_top(const char *sentence, int len, int current_index)
 {

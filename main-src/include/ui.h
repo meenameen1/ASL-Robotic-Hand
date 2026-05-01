@@ -23,5 +23,6 @@ typedef struct
 } UI_Context_t;
 
 void ui_state_machine(UI_Context_t* ui);
+void handle_key_press(UI_Context_t* ui, char key);
 
 #endif

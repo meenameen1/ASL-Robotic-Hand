@@ -26,6 +26,10 @@ void core1_operation(void);
 
 #define MAX_SENTENCE_LEN 128
 
+static UI_Context_t* ui;
+static int current_index = 0;
+static int translate_trigger = 0;
+
 int main(void)
 {
 
@@ -34,7 +38,7 @@ int main(void)
 
    //Running UI stuff on core 1
    multicore_launch_core1(core1_operation);
-
+   sleep_ms(500);
    gpio_init(22);
    gpio_set_dir(22, GPIO_OUT);
    gpio_put(22, 0); // Start with power off
@@ -42,29 +46,21 @@ int main(void)
    init_servo_positions();
    // blocking_read_uart();
 
-   init_uart();
-
-   char sentence[MAX_SENTENCE_LEN];
-   int sentence_len = 0;
-   int current_index = 0;
 
 
-   // char letters_to_test[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
-   while(1) {
-      mic_uart_poll();
-      char letter;
-      // Pull all new UART letters into the sentence buffer
-      while (mic_pop_letter(&letter)) {
-         if (sentence_len < MAX_SENTENCE_LEN - 1) {
-            sentence[sentence_len++] = letter;
-            sentence[sentence_len] = '\0';
-         }
-      }
-      if (current_index < sentence_len) {
-         draw_sentence_screen(sentence, sentence_len, current_index);
-         move_to_letter_smoothly(sentence[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+
+      while(1) {
+
+      if (translate_trigger && current_index < ui->lcd->len) {
+         draw_highlighted_letter(ui->lcd, current_index);
+         move_to_letter_smoothly(ui->lcd->display_buffer[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+         sleep_ms(500);
          current_index++;
-    }
+      }
+      if(current_index >= ui->lcd->len) {
+         translate_trigger = 0; // Reset trigger when done
+         current_index = 0; // Reset index for next time
+      }
     tight_loop_contents();
    }
 }
@@ -100,12 +96,56 @@ void core1_operation(void)
       .lcd = &lcd,
       .oled = &oled
    };
+   ui = &ui_context;
 
    usb_initPeripherals(&keyboard);
    setUsbPowerOutput(0);
+
+
+   init_uart();
    while(1)
    {
       // usb_task();
       // ui_state_machine(&ui_context);
+      mic_uart_poll();
+      char letter;
+      // Pull all new UART letters into the sentence buffer
+      switch(ui_context.state)
+      {
+         case(STATE_IDLE):
+            while (mic_pop_letter(&letter))
+            {
+               if(letter == '\r')
+               {
+                  ui_context.state = STATE_TRANSLATING;
+                  translate_trigger = 1;
+               }
+               else if(letter == '\n')
+               {
+
+               }
+               else
+               {
+                  // handle_key_press(ui, 48 + ui->lcd->len%10);
+                  handle_key_press(ui, letter);
+               }
+            }
+            break;
+         case(STATE_TRANSLATING):
+            if(translate_trigger == 1)
+            {
+            }
+            else
+            {
+               ui->state = STATE_IDLE;
+               LCD_Clear(0x0000);
+               LCD_DrawString(10, 10, 0x0000, 0xFFFF, " ASL Robotic Hand Translator ", 32, 0);
+               ui->lcd->display_buffer[0] = '\0';
+               ui->lcd->len = 0;
+            }
+             break;
+         default:
+            break;
+      }
    }
 }
