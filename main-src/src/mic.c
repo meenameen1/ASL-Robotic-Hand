@@ -77,7 +77,7 @@ void mic_uart_poll(void)
     while (uart_is_readable(UART_ID)) {
         uint8_t c = uart_getc(UART_ID);
 
-        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#'  || c == '\b' || c == '\r') {
+        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#'  || c == '\b' || c == '\r' || c == '3') {
             push_letter((char)c);
         }
         // else if (c >= 'a' && c <= 'z') {

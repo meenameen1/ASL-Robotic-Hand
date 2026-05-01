@@ -29,6 +29,7 @@ void core1_operation(void);
 static UI_Context_t* ui;
 static int current_index = 0;
 static int translate_trigger = 0;
+static int motor_on = 1;
 
 int main(void)
 {
@@ -115,10 +116,16 @@ void core1_operation(void)
          case(STATE_IDLE):
             while (mic_pop_letter(&letter))
             {
+
                if(letter == '\r')
                {
                   ui_context.state = STATE_TRANSLATING;
                   translate_trigger = 1;
+               }
+               else if(letter == '3')
+               {
+                  motor_on = !motor_on;
+                  gpio_put(22, motor_on);
                }
                else if(letter == '\n')
                {
