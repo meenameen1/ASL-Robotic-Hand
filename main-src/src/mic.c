@@ -17,6 +17,20 @@ static char letter_buffer[LETTER_BUFFER_SIZE];
 static int buffer_head = 0;
 static int buffer_tail = 0;
 
+char buffer_current_letter(void)
+{
+    int index = buffer_head;
+    if(index == 0)
+    {
+        index = LETTER_BUFFER_SIZE - 1;
+    }
+    else
+    {
+        index = index - 1;
+    }
+    return letter_buffer[index];
+}
+
 static int next_index(int index)
 {
     return (index + 1) % LETTER_BUFFER_SIZE;
@@ -77,7 +91,7 @@ void mic_uart_poll(void)
     while (uart_is_readable(UART_ID)) {
         uint8_t c = uart_getc(UART_ID);
 
-        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#'  || c == '\b' || c == '\r' || c == '3') {
+        if ((c >= 'A' && c <= 'Z') || c == ' ' || c == '#'  || c == '\b' || c == '\r' || c == '3' || c == 27) {
             push_letter((char)c);
         }
         // else if (c >= 'a' && c <= 'z') {
@@ -85,6 +99,7 @@ void mic_uart_poll(void)
         // }
     }
 }
+
 
 // Old functions
 /*

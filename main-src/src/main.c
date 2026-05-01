@@ -51,7 +51,7 @@ int main(void)
 
    char last_letter;
    while(1) {
-      
+
       if(current_index > 0) {
          last_letter = ui->lcd->display_buffer[current_index-1];
       }
@@ -134,6 +134,15 @@ void core1_operation(void)
                   ui_context.state = STATE_TRANSLATING;
                   translate_trigger = 1;
                }
+               else if(letter == 27)
+               {
+                  //27
+                  // handle_key_press(ui, letter/10 + 48);
+                  // handle_key_press(ui, letter%10 + 48);
+                  reset_lcd();
+                  ui->lcd->display_buffer[0] = '\0';
+                  ui->lcd->len = 0;
+               }
                else if(letter == '3')
                {
                   motor_on = !motor_on;
@@ -153,6 +162,15 @@ void core1_operation(void)
          case(STATE_TRANSLATING):
             if(translate_trigger == 1)
             {
+               if(buffer_current_letter() == 27)
+               {
+                  translate_trigger = 0;
+               }
+               else if(buffer_current_letter() == 3)
+               {
+                  motor_on = !motor_on;
+                  gpio_put(22, motor_on);
+               }
             }
             else
             {

@@ -110,5 +110,6 @@ void draw_sentence_top(const char *sentence, int len, int current_index);
 void draw_big_current_letter(char current_letter);
 void draw_sentence_screen(const char *sentence, int len, int current_index);
 void draw_highlighted_letter(LCD_t *lcd, int letter_index);
+void reset_lcd() ;
 
 #endif

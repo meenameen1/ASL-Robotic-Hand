@@ -7,5 +7,6 @@ void init_uart(void);
 void mic_uart_poll(void);
 bool mic_pop_letter(char *letter);
 bool mic_has_letters(void);
+char buffer_current_letter(void);
 
 #endif

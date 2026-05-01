@@ -42,6 +42,12 @@ spi_inst_t *SPI = spi0; // Use SPI0 for the LCD
 // #define PIN_DC     3
 // #define PIN_nRESET 4
 
+void reset_lcd() {
+    LCD_Clear(0x0000);
+    LCD_DrawString(10, 10, 0x0000, 0xFFFF, " ASL Robotic Hand Translator ", 32, 0);
+
+}
+
 void init_spi_lcd() {
     gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
     gpio_set_function(PIN_DC, GPIO_FUNC_SIO);
