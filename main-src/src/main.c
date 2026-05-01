@@ -49,12 +49,24 @@ int main(void)
 
 
 
-
-      while(1) {
-
+   char last_letter;
+   while(1) {
+      
+      if(current_index > 0) {
+         last_letter = ui->lcd->display_buffer[current_index-1];
+      }
       if (translate_trigger && current_index < ui->lcd->len) {
          draw_highlighted_letter(ui->lcd, current_index);
-         move_to_letter_smoothly(ui->lcd->display_buffer[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+         if (last_letter == ui->lcd->display_buffer[current_index]) {
+            secondpwmtest(21, 1200); // same letter --> tilt hand back
+            sleep_ms(500);
+            move_to_letter_smoothly(ui->lcd->display_buffer[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+         } else if (ui->lcd->display_buffer[current_index] == ' ') {
+            secondpwmtest(21, 1600); // space --> tilt hand forward
+         }
+         else {
+            move_to_letter_smoothly(ui->lcd->display_buffer[current_index], DEFAULT_STEP_SIZE_US, DEFAULT_TICK_TIME_MS);
+         }
          sleep_ms(500);
          current_index++;
       }
@@ -62,7 +74,7 @@ int main(void)
          translate_trigger = 0; // Reset trigger when done
          current_index = 0; // Reset index for next time
       }
-    tight_loop_contents();
+      tight_loop_contents();
    }
 }
 
@@ -154,5 +166,6 @@ void core1_operation(void)
          default:
             break;
       }
+      tight_loop_contents();
    }
 }

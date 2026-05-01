@@ -306,6 +306,6 @@ void init_servo_positions(void) {
 }
 
 void secondpwmtest(uint8_t channel, uint16_t pulse_us) {
-    servo_set_us(channel, pulse_us);
+    servo_set_us(swappedMotorsIndices[channel], pulse_us);
     // servo_index, hand_poses[letter_index(target_letter)].motor_positions[servo_index])
 }
