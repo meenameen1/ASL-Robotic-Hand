@@ -1,4 +1,4 @@
-import queue
+vimport queue
 import re
 import threading
 import time
@@ -33,6 +33,7 @@ KEY_TO_CHAR = {
     ecodes.KEY_Q: "q", ecodes.KEY_R: "r", ecodes.KEY_S: "s", ecodes.KEY_T: "t",
     ecodes.KEY_U: "u", ecodes.KEY_V: "v", ecodes.KEY_W: "w", ecodes.KEY_X: "x",
     ecodes.KEY_Y: "y", ecodes.KEY_Z: "z", ecodes.KEY_SPACE: " ",
+    ecodes.KEY_BACKSPACE: "\b", ecodes.KEY_ENTER: "\r", ecodes.KEY_3: "3", ecodes.KEY_ESC: "\x1b",
 }
 
 
@@ -134,7 +135,7 @@ class UARTSender:
     def enqueue_char(self, ch):
         if ch == " " and not SEND_SPACES:
             return
-        if ch == " " or ("a" <= ch <= "z"):
+        if ch == " " or ("a" <= ch <= "z") or ch == "\b" or ch == "\r" or ch == "3" or ch == "\x1b":
             self._letters.put(ch.upper())
 
     def _run(self):
@@ -144,7 +145,7 @@ class UARTSender:
             except queue.Empty:
                 continue
             try:
-                self._serial.write(f"{ch}\n".encode())
+                self._serial.write(ch.encode())
                 self._serial.flush()
                 print(f"{ch} ({ord(ch)})", flush=True)
             except Exception:
@@ -152,24 +153,82 @@ class UARTSender:
             time.sleep(self._interval_s)
 
 
-def find_keyboard():
-    for path in list_devices():
-        dev = InputDevice(path)
-        caps = dev.capabilities().get(ecodes.EV_KEY, [])
-        if ecodes.KEY_1 in caps and ecodes.KEY_2 in caps:
-            return dev
+def find_keyboard(timeout_s=15):
+    print(f"[Keyboard] Waiting up to {timeout_s}s for keyboard to enumerate...", flush=True)
+    start_time = time.time()
+
+    while time.time() - start_time < timeout_s:
+        for path in list_devices():
+            try:
+                dev = InputDevice(path)
+                caps = dev.capabilities().get(ecodes.EV_KEY, [])
+                if ecodes.KEY_1 in caps and ecodes.KEY_2 in caps:
+                    return dev
+            except OSError:
+                # Ignore devices we can't read or that disappear
+                pass
+
+        time.sleep(1.0) # Wait 1 second before checking again
+
     return None
 
 
-class KeyboardController:
-    def __init__(self, on_mic_mode, on_keyboard_mode, on_letter):
-        self._on_mic_mode      = on_mic_mode
-        self._on_keyboard_mode = on_keyboard_mode
-        self._on_letter        = on_letter
+# class KeyboardController:
+#     def __init__(self, on_mic_mode, on_keyboard_mode, on_letter):
+#         self._on_mic_mode      = on_mic_mode
+#         self._on_keyboard_mode = on_keyboard_mode
+#         self._on_letter        = on_letter
 
-        self._keyboard_mode = False
-        self._stop_event    = threading.Event()
-        self._thread        = threading.Thread(
+#         self._keyboard_mode = False
+#         self._stop_event    = threading.Event()
+#         self._thread        = threading.Thread(
+#             target=self._run, daemon=True, name="keyboard"
+#         )
+
+#     def start(self):
+#         self._thread.start()
+
+#     def stop(self, timeout=2.0):
+#         self._stop_event.set()
+#         self._thread.join(timeout=timeout)
+
+#     def _run(self):
+#         dev = find_keyboard()
+#         if dev is None:
+#             print("[Keyboard] No keyboard found.", flush=True)
+#             return
+#         print(f"[Keyboard] Using {dev.name}. "
+#               "Press 1=mic mode, 2=keyboard mode.", flush=True)
+#         try:
+#             for event in dev.read_loop():
+#                 if self._stop_event.is_set():
+#                     break
+#                 if event.type != ecodes.EV_KEY:
+#                     continue
+#                 key = categorize(event)
+#                 if key.keystate != key.key_down:
+#                 # if key.keystate != ecodes.KeyEvent.key_down:
+#                     continue
+
+#                 code = key.scancode
+#                 if code == ecodes.KEY_1:
+#                     self._keyboard_mode = False
+#                     self._on_mic_mode()
+#                 elif code == ecodes.KEY_2:
+#                     self._keyboard_mode = True
+#                     self._on_keyboard_mode()
+#                 elif self._keyboard_mode and code in KEY_TO_CHAR:
+#                     self._on_letter(KEY_TO_CHAR[code])
+#         except OSError:
+#             pass
+class KeyboardController:
+    def __init__(self, on_ptt_press, on_ptt_release, on_letter):
+        self._on_ptt_press   = on_ptt_press
+        self._on_ptt_release = on_ptt_release
+        self._on_letter      = on_letter
+
+        self._stop_event = threading.Event()
+        self._thread     = threading.Thread(
             target=self._run, daemon=True, name="keyboard"
         )
 
@@ -185,86 +244,161 @@ class KeyboardController:
         if dev is None:
             print("[Keyboard] No keyboard found.", flush=True)
             return
+
         print(f"[Keyboard] Using {dev.name}. "
-              "Press 1=mic mode, 2=keyboard mode.", flush=True)
+              "Keyboard is ALWAYS ON. Hold '1' for Push-to-Talk.", flush=True)
+
+        dev.grab() # Take exclusive control of the keyboard
+
         try:
             for event in dev.read_loop():
                 if self._stop_event.is_set():
                     break
                 if event.type != ecodes.EV_KEY:
                     continue
-                key = categorize(event)
-                if key.keystate != key.key_down:
-                    continue
 
+                key = categorize(event)
                 code = key.scancode
+
+                # --- PUSH TO TALK LOGIC ---
                 if code == ecodes.KEY_1:
-                    self._keyboard_mode = False
-                    self._on_mic_mode()
-                elif code == ecodes.KEY_2:
-                    self._keyboard_mode = True
-                    self._on_keyboard_mode()
-                elif self._keyboard_mode and code in KEY_TO_CHAR:
-                    self._on_letter(KEY_TO_CHAR[code])
+                    if key.keystate == key.key_down:
+                        self._on_ptt_press()
+                    elif key.keystate == key.key_up:
+                        self._on_ptt_release()
+
+                # --- ALWAYS-ON TYPING LOGIC ---
+                else:
+                    # Only send characters on the initial press (ignore hold/release)
+                    if key.keystate == key.key_down:
+                        if code in KEY_TO_CHAR:
+                            self._on_letter(KEY_TO_CHAR[code])
         except OSError:
             pass
+        finally:
+            try:
+                dev.ungrab()
+            except OSError:
+                pass
 
 
+# if __name__ == "__main__":
+#     import sys
+
+#     device_index = int(sys.argv[1]) if len(sys.argv) > 1 else None
+
+#     audio_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
+
+#     sender = UARTSender(PICO_SERIAL_PORT, PICO_BAUD_RATE, LETTER_INTERVAL_S)
+#     sender.start()
+
+#     worker = STTWorker(
+#         input_queue=audio_queue,
+#         on_final=sender.enqueue_text,
+#     )
+
+#     capture = None
+#     mic_active = False
+#     state_lock = threading.Lock()
+
+#     def stop_mic():
+#         global capture, mic_active
+#         if not mic_active:
+#             return
+#         if capture:
+#             capture.stop()
+#             capture = None
+#         worker.stop()
+#         mic_active = False
+
+#     def enter_mic_mode():
+#         global capture, mic_active
+#         with state_lock:
+#             if mic_active:
+#                 return
+#             print("[Control] MIC MODE", flush=True)
+#             worker.start()
+#             capture = AudioCapture(
+#                 output_queue=audio_queue, device=device_index
+#             )
+#             threading.Thread(
+#                 target=capture.start, daemon=True, name="audio-capture"
+#             ).start()
+#             mic_active = True
+
+#     def enter_keyboard_mode():
+#         with state_lock:
+#             print("[Control] KEYBOARD MODE", flush=True)
+#             stop_mic()
+
+#     def on_keyboard_letter(ch):
+#         sender.enqueue_char(ch)
+
+#     keyboard = KeyboardController(
+#         on_mic_mode=enter_mic_mode,
+#         on_keyboard_mode=enter_keyboard_mode,
+#         on_letter=on_keyboard_letter,
+#     )
+#     keyboard.start()
+
+#     try:
+#         while True:
+#             time.sleep(1.0)
+#     except KeyboardInterrupt:
+#         pass
+#     finally:
+#         keyboard.stop()
+#         with state_lock:
+#             stop_mic()
+#         sender.stop()
 if __name__ == "__main__":
     import sys
 
     device_index = int(sys.argv[1]) if len(sys.argv) > 1 else None
-
     audio_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
     sender = UARTSender(PICO_SERIAL_PORT, PICO_BAUD_RATE, LETTER_INTERVAL_S)
     sender.start()
 
+    print("\n[System] Loading STT Model... this will take a moment but only happens once.", flush=True)
     worker = STTWorker(
         input_queue=audio_queue,
         on_final=sender.enqueue_text,
     )
+    worker.start() # LOAD THE MODEL ONCE HERE
+    print("[System] STT Model loaded and ready!\n", flush=True)
 
     capture = None
-    mic_active = False
     state_lock = threading.Lock()
 
-    def stop_mic():
-        global capture, mic_active
-        if not mic_active:
-            return
-        if capture:
-            capture.stop()
-            capture = None
-        worker.stop()
-        mic_active = False
-
-    def enter_mic_mode():
-        global capture, mic_active
+    def on_ptt_press():
+        global capture
         with state_lock:
-            if mic_active:
+            if capture is not None:
                 return
-            print("[Control] MIC MODE", flush=True)
-            worker.start()
+            print("[Control] PTT HELD - Recording audio...", flush=True)
             capture = AudioCapture(
                 output_queue=audio_queue, device=device_index
             )
             threading.Thread(
                 target=capture.start, daemon=True, name="audio-capture"
             ).start()
-            mic_active = True
 
-    def enter_keyboard_mode():
+    def on_ptt_release():
+        global capture
         with state_lock:
-            print("[Control] KEYBOARD MODE", flush=True)
-            stop_mic()
+            if capture is None:
+                return
+            print("[Control] PTT RELEASED - Stopping audio...", flush=True)
+            capture.stop()
+            capture = None
 
     def on_keyboard_letter(ch):
         sender.enqueue_char(ch)
 
     keyboard = KeyboardController(
-        on_mic_mode=enter_mic_mode,
-        on_keyboard_mode=enter_keyboard_mode,
+        on_ptt_press=on_ptt_press,
+        on_ptt_release=on_ptt_release,
         on_letter=on_keyboard_letter,
     )
     keyboard.start()
@@ -277,5 +411,7 @@ if __name__ == "__main__":
     finally:
         keyboard.stop()
         with state_lock:
-            stop_mic()
+            if capture:
+                capture.stop()
+        worker.stop()
         sender.stop()
